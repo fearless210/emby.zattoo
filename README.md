@@ -74,9 +74,16 @@ des essais.
 - FFmpeg installé et exécutable par l'utilisateur qui lance Emby ;
 - un accès HTTPS sortant vers Zattoo.
 
-### 1. Construire le plugin
+### 1. Télécharger le plugin
 
-Le SDK .NET 8 est nécessaire uniquement pour construire le projet :
+Télécharger `Emby.Zattoo-v0.2.0.zip` depuis la
+[release v0.2.0](https://github.com/fearless210/emby.zattoo/releases/tag/v0.2.0),
+puis extraire les deux DLL. Elles sont également proposées séparément dans les
+assets de la release. Le fichier `SHA256SUMS.txt` permet d'en vérifier
+l'intégrité.
+
+Pour construire le plugin depuis les sources à la place, le SDK .NET 8 est
+nécessaire :
 
 ```powershell
 dotnet build .\Emby.Zattoo.sln --configuration Release
