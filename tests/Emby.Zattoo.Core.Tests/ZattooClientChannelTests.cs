@@ -62,6 +62,32 @@ public sealed class ZattooClientChannelTests
     }
 
     [Fact]
+    public async Task GetChannelsAsync_DropsLogoWithUnsupportedScheme()
+    {
+        var transport = new FakeZattooTransport();
+        ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/channels/favorites",
+            HttpStatusCode.OK,
+            Fixture.Read("favorites.json"));
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/v3/cached/fixture-guide-hash/channels",
+            HttpStatusCode.OK,
+            Fixture.Read("channels.json").Replace(
+                "\"/logos/rts1.png\"",
+                "\"file:///tmp/rts1.png\""));
+
+        using var client = ZattooClientAuthenticationTests.CreateClient(transport);
+        var channels = await client.GetChannelsAsync();
+
+        Assert.Null(channels[0].LogoUrl);
+        Assert.Equal("https://logos.zattic.com/logos/rts2.png", channels[1].LogoUrl);
+        Assert.Equal(0, transport.PendingRequestCount);
+    }
+
+    [Fact]
     public async Task GetChannelsAsync_DoesNotLoopAfterSecondForbiddenResponse()
     {
         var transport = new FakeZattooTransport();

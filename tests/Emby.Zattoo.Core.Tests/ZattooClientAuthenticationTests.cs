@@ -92,6 +92,23 @@ public sealed class ZattooClientAuthenticationTests
     }
 
     [Fact]
+    public async Task LoginAsync_RejectsExternalApplicationBundle()
+    {
+        var transport = new FakeZattooTransport();
+        transport.Enqueue(HttpMethod.Get, "/token.json", HttpStatusCode.NotFound, string.Empty);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/login",
+            HttpStatusCode.OK,
+            "<html><script src=\"//example.invalid/app-fixture.js\"></script></html>");
+
+        using var client = CreateClient(transport);
+
+        await Assert.ThrowsAsync<ZattooProtocolException>(() => client.LoginAsync());
+        Assert.Equal(0, transport.PendingRequestCount);
+    }
+
+    [Fact]
     public async Task LoginAsync_PropagatesCancellation()
     {
         var transport = new FakeZattooTransport();

@@ -758,19 +758,45 @@ namespace Emby.Zattoo.Zattoo
                 return null;
             }
 
-            if (logoPath.StartsWith("//", StringComparison.Ordinal))
+            var normalized = logoPath.Trim();
+            if (normalized.IndexOf('\\') >= 0)
             {
-                return "https:" + logoPath;
+                return null;
             }
 
-            if (Uri.TryCreate(logoPath, UriKind.Absolute, out var absolute))
+            if (normalized.StartsWith("//", StringComparison.Ordinal))
             {
-                return absolute.Scheme == Uri.UriSchemeHttp
-                    ? "https://" + absolute.Host + absolute.PathAndQuery
-                    : absolute.AbsoluteUri;
+                return Uri.TryCreate("https:" + normalized, UriKind.Absolute, out var networkPath)
+                    && networkPath.Scheme == Uri.UriSchemeHttps
+                    ? networkPath.AbsoluteUri
+                    : null;
             }
 
-            return new Uri(new Uri("https://logos.zattic.com/"), logoPath).AbsoluteUri;
+            if (Uri.TryCreate(normalized, UriKind.Absolute, out var absolute))
+            {
+                if (absolute.Scheme == Uri.UriSchemeHttp)
+                {
+                    return new UriBuilder(absolute)
+                    {
+                        Scheme = Uri.UriSchemeHttps,
+                        Port = -1,
+                    }.Uri.AbsoluteUri;
+                }
+
+                if (absolute.Scheme == Uri.UriSchemeHttps)
+                {
+                    return absolute.AbsoluteUri;
+                }
+
+                // A rooted web path can be parsed as file:// on Unix. It is
+                // still relative to the logo host and must remain supported.
+                if (!normalized.StartsWith("/", StringComparison.Ordinal))
+                {
+                    return null;
+                }
+            }
+
+            return new Uri(new Uri("https://logos.zattic.com/"), normalized).AbsoluteUri;
         }
 
         private static bool TryReadAppToken(string content, out string token)
@@ -913,14 +939,25 @@ namespace Emby.Zattoo.Zattoo
         private static string NormalizeRelativePath(string path)
         {
             var normalized = WebUtility.HtmlDecode(path).Trim();
+            if (normalized.Length == 0
+                || normalized.StartsWith("//", StringComparison.Ordinal)
+                || normalized.IndexOf('\\') >= 0
+                || normalized.IndexOfAny(new[] { '\r', '\n' }) >= 0)
+            {
+                throw new ZattooProtocolException("Zattoo application metadata referenced an external resource.");
+            }
+
+            if (normalized.StartsWith("/", StringComparison.Ordinal))
+            {
+                return normalized;
+            }
+
             if (Uri.TryCreate(normalized, UriKind.Absolute, out _))
             {
                 throw new ZattooProtocolException("Zattoo application metadata referenced an external resource.");
             }
 
-            return normalized.StartsWith("/", StringComparison.Ordinal)
-                ? normalized
-                : "/" + normalized;
+            return "/" + normalized;
         }
 
         private static ZattooSessionInfo CopySessionInfo(ZattooSessionInfo source)
