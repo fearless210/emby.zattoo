@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Zattoo.Spike</AssemblyName>
+    <RootNamespace>Zattoo.Spike</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Emby.Zattoo.Core\Emby.Zattoo.Core.csproj" />
+  </ItemGroup>
+</Project>

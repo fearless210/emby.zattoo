@@ -1,0 +1,69 @@
+{
+  "groups": [
+    {
+      "name": "Fixture"
+    }
+  ],
+  "channels": [
+    {
+      "cid": "ch-open",
+      "group_index": 0,
+      "qualities": [
+        {
+          "availability": "available",
+          "level": "fhd",
+          "title": "Open Channel",
+          "logo_white_84": "/logos/open.png",
+          "drm_required": true
+        },
+        {
+          "availability": "available",
+          "level": "hd",
+          "title": "Open Channel",
+          "logo_white_84": "/logos/open.png",
+          "drm_required": false
+        },
+        {
+          "availability": "available",
+          "level": "sd",
+          "title": "Open Channel",
+          "logo_white_84": "/logos/open.png",
+          "drm_required": false
+        }
+      ]
+    },
+    {
+      "cid": "ch-drm",
+      "group_index": 0,
+      "qualities": [
+        {
+          "availability": "available",
+          "level": "fhd",
+          "title": "DRM Channel",
+          "logo_white_84": "/logos/drm.png",
+          "drm_required": true
+        },
+        {
+          "availability": "available",
+          "level": "hd",
+          "title": "DRM Channel",
+          "logo_white_84": "/logos/drm.png",
+          "drm_required": true
+        }
+      ]
+    },
+    {
+      "cid": "ch-offline",
+      "group_index": 0,
+      "qualities": [
+        {
+          "availability": "unavailable",
+          "level": "hd",
+          "title": "Offline Channel",
+          "logo_white_84": "/logos/offline.png",
+          "drm_required": false
+        }
+      ]
+    }
+  ]
+}

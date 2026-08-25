@@ -1,0 +1,43 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Emby.Zattoo.Core", "src\Emby.Zattoo.Core\Emby.Zattoo.Core.csproj", "{71639777-CC0B-4B4E-8C3D-DDAA40AFC34F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zattoo.Spike", "src\Zattoo.Spike\Zattoo.Spike.csproj", "{BFECA2A0-9BBE-4541-AF02-D8736F6A1CC2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Emby.Zattoo.Core.Tests", "tests\Emby.Zattoo.Core.Tests\Emby.Zattoo.Core.Tests.csproj", "{5A61B272-4976-4B90-9188-827723365089}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Emby.Zattoo.Plugin", "src\Emby.Zattoo.Plugin\Emby.Zattoo.Plugin.csproj", "{E916224F-B02B-46B3-BBD3-EF11F891451C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Emby.Zattoo.Plugin.Tests", "tests\Emby.Zattoo.Plugin.Tests\Emby.Zattoo.Plugin.Tests.csproj", "{519CDE18-1EF2-49D4-BA7A-EF55DE5C42E3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{71639777-CC0B-4B4E-8C3D-DDAA40AFC34F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71639777-CC0B-4B4E-8C3D-DDAA40AFC34F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71639777-CC0B-4B4E-8C3D-DDAA40AFC34F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71639777-CC0B-4B4E-8C3D-DDAA40AFC34F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BFECA2A0-9BBE-4541-AF02-D8736F6A1CC2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BFECA2A0-9BBE-4541-AF02-D8736F6A1CC2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BFECA2A0-9BBE-4541-AF02-D8736F6A1CC2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BFECA2A0-9BBE-4541-AF02-D8736F6A1CC2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A61B272-4976-4B90-9188-827723365089}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A61B272-4976-4B90-9188-827723365089}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A61B272-4976-4B90-9188-827723365089}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A61B272-4976-4B90-9188-827723365089}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E916224F-B02B-46B3-BBD3-EF11F891451C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E916224F-B02B-46B3-BBD3-EF11F891451C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E916224F-B02B-46B3-BBD3-EF11F891451C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E916224F-B02B-46B3-BBD3-EF11F891451C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{519CDE18-1EF2-49D4-BA7A-EF55DE5C42E3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{519CDE18-1EF2-49D4-BA7A-EF55DE5C42E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{519CDE18-1EF2-49D4-BA7A-EF55DE5C42E3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{519CDE18-1EF2-49D4-BA7A-EF55DE5C42E3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

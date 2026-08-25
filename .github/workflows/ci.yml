@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore Emby.Zattoo.sln
+
+      - name: Build
+        run: dotnet build Emby.Zattoo.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test Emby.Zattoo.sln --configuration Release --no-build --no-restore
+
+      - name: Verify formatting
+        run: dotnet format Emby.Zattoo.sln --verify-no-changes --no-restore
+
+      - name: Upload plugin DLLs
+        uses: actions/upload-artifact@v6
+        with:
+          name: Emby.Zattoo-${{ github.sha }}
+          path: artifacts/Emby.Zattoo/*.dll
+          if-no-files-found: error
+          retention-days: 14

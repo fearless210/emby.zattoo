@@ -1,0 +1,192 @@
+# API Zattoo observée dans `pvr.zattoo`
+
+Cette documentation décrit le comportement observé dans la branche `Piers` de
+[`rbuehlma/pvr.zattoo`](https://github.com/rbuehlma/pvr.zattoo), version 22.2.3,
+commit `30c809e66f8eef22987fb518e89875031781dcae`. Il ne s'agit pas
+d'une API publique contractuelle de Zattoo. Les chemins, champs et durées peuvent
+changer sans préavis.
+
+Le présent projet réimplémente uniquement le protocole observé. Aucun code GPL
+n'est copié et aucun mécanisme de déchiffrement ou de contournement DRM n'est
+prévu.
+
+## Séquence minimale
+
+```text
+GET /token.json
+       ↓ client_app_token
+POST /zapi/v3/session/hello
+       ↓ cookie de session
+GET /zapi/v3/session
+       ↓ compte déjà associé ?
+POST /zapi/v3/account/login (si nécessaire)
+       ↓ power_guide_hash
+GET /zapi/channels/favorites
+GET /zapi/v3/cached/{power_guide_hash}/channels
+```
+
+Le même conteneur de cookies doit rester côté serveur pendant toute la séquence.
+`pvr.zattoo` conserve notamment `beaker.session.id` et un identifiant `uuid`.
+Le prototype utilise un `CookieContainer` privé et ne renvoie jamais ces cookies
+à un client Emby.
+
+## Opérations
+
+### Récupération du jeton d'application
+
+| Élément | Valeur observée |
+|---|---|
+| Méthode | `GET` |
+| Chemin principal | `/token.json` |
+| Paramètres | aucun |
+| Cookie requis | aucun connu |
+| Réponse utile | `success`, `session_token` |
+| Validité | non documentée ; considéré comme éphémère et rechargé à la création de session |
+| Erreurs | si le JSON n'est pas exploitable, recherche de `window.appToken` dans `/login`, puis d'un fichier `token-*.json` référencé par le bundle `app-*.js` |
+
+`session_token` est sensible et ne doit jamais être journalisé.
+
+### Initialisation de session (`hello`)
+
+| Élément | Valeur observée |
+|---|---|
+| Méthode | `POST`, `application/x-www-form-urlencoded` |
+| Chemin | `/zapi/v3/session/hello` |
+| Paramètres | `lang`, `app_version`, `client_app_token`, `uuid`, `format=json` |
+| Cookie requis | `uuid` envoyé par le client ; le serveur peut définir `beaker.session.id` |
+| Réponse utile | `active` |
+| Validité | non documentée ; liée au cookie de session |
+| Erreurs | réponse non-2xx, JSON invalide ou `active != true` : session non initialisée |
+
+Le prototype annonce sa propre identité HTTP (`Emby.Zattoo`) et utilise le flux
+web observé. Il ne prétend pas être un téléviseur ou un appareil particulier.
+Le client maintenu dans Streamlink utilise actuellement `app_version=3.2120.1`,
+`Referer` vers le fournisseur et `X-Requested-With: XMLHttpRequest`; le Core
+reprend ces paramètres de protocole web.
+
+### Lecture de session
+
+| Élément | Valeur observée |
+|---|---|
+| Méthode | `GET` |
+| Chemin | `/zapi/v3/session` |
+| Paramètres | aucun |
+| Cookies requis | session courante et `uuid` |
+| Réponse utile | `active`, `account`, `current_country`, `account.service_country`, `nonlive`, `power_guide_hash` |
+| Validité | non documentée |
+| Erreurs | `401`/`403` : session à invalider ; autre non-2xx ou `active != true` : échec d'initialisation |
+
+Une valeur `account: null` indique qu'une authentification de compte est encore
+nécessaire.
+
+### Authentification du compte
+
+| Élément | Valeur observée |
+|---|---|
+| Méthode | `POST`, `application/x-www-form-urlencoded` |
+| Chemin | `/zapi/v3/account/login` |
+| Paramètres | `login`, `password`, `format=json`, `remember=true` |
+| Cookies requis | `uuid`; le serveur établit/actualise la session |
+| Réponse utile | `active`, `account`, `power_guide_hash`, informations de pays et capacités |
+| Validité | non documentée ; portée par les cookies |
+| Erreurs | `401`/`403` ou `active != true` : identifiants refusés/session inutilisable ; `429` : limitation de débit |
+
+Le corps de cette requête ne doit jamais être tracé. Les identifiants restent
+uniquement en mémoire dans le processus serveur. Le cookie initialisé par
+`session/hello` est conservé pour cette requête, conformément au flux web courant.
+
+### Favoris
+
+| Élément | Valeur observée |
+|---|---|
+| Méthode | `GET` |
+| Chemin | `/zapi/channels/favorites` |
+| Paramètres | aucun |
+| Cookies requis | session authentifiée |
+| Réponse utile | `success`, tableau `favorites` de `cid` |
+| Validité | non documentée ; ne pas considérer la réponse comme permanente |
+| Erreurs | une seule réauthentification et un seul nouvel essai pour `401`/`403` ; aucun retry infini |
+
+### Chaînes
+
+| Élément | Valeur observée |
+|---|---|
+| Méthode | `GET` |
+| Chemin | `/zapi/v3/cached/{power_guide_hash}/channels` |
+| Paramètres | `power_guide_hash` dans le chemin |
+| Cookies requis | session authentifiée |
+| Réponse utile | `groups`, `channels[].cid`, `group_index`, `recording`, `qualities[]` |
+| Champs qualité | `availability`, `level`, `title`, `logo_white_84`, `drm_required` |
+| Validité | cache côté fournisseur, durée non documentée ; le hash est renouvelé avec la session |
+| Erreurs | même politique bornée `401`/`403`; JSON sans tableau `channels` : erreur de protocole |
+
+Le `cid` est l'identifiant stable à conserver. Un index ou la position courante
+ne doit pas servir d'identité. Pour Milestone 1, les numéros sont attribués dans
+l'ordre de la réponse et les favoris sont exposés par `IsFavorite`.
+
+### Guide EPG (analysé, non implémenté)
+
+| Élément | Valeur observée |
+|---|---|
+| Méthode | `GET` |
+| Chemin | `/zapi/v3/cached/{power_guide_hash}/guide` |
+| Paramètres | `start`, `end` (timestamps Unix), `format=json` |
+| Cookies requis | session authentifiée |
+| Réponse utile | objet `channels`, puis programmes par `cid`; champs courts `id`, `s`, `e`, `t`, `et`, `g`, `i_t` |
+| Validité observée dans la référence | requêtes découpées en fenêtres de cinq heures ; cache local utilisé par Kodi |
+| Erreurs | JSON invalide/absence de chaîne : plage non chargée ; `401`/`403` doit déclencher au plus une réauthentification |
+
+Détails complémentaires :
+`GET /zapi/v2/cached/program/power_details/{power_guide_hash}` avec
+`complete=True&program_ids=<liste>`. La réponse fournit notamment `d`, `s_no` et
+`e_no`. Cette opération sera revue lors du milestone EPG.
+
+### Stream Live (implémenté dans le spike)
+
+| Élément | Valeur observée |
+|---|---|
+| Méthode | `POST`, `application/x-www-form-urlencoded` |
+| Chemin MVP actuel | `/zapi/watch` |
+| Chemin Kodi historique | `/zapi/watch/live/{cid}` |
+| Paramètres MVP | `cid`, `quality`, `stream_type`, `https_watch_urls=true`, `format=json` |
+| Types observés | `dash` sans DRM ; `dash_widevine` avec DRM |
+| Cookies requis | session authentifiée |
+| Réponse utile | `stream.url`, `stream.watch_urls[].url`, `maxrate`, `license_url`, `drm_limit_applied` |
+| Validité | URL signée et éphémère ; toujours la demander juste avant lecture |
+| Erreurs | `401`/`403` : un renouvellement + un retry ; absence de stream : indisponible ; DRM obligatoire : non pris en charge |
+
+Le catalogue de chaînes expose déjà `drm_required` par qualité. Le Core conserve
+les qualités disponibles avec la chaîne et applique deux chemins :
+
+- `GetStreamOptionsAsync(cid)` décrit toutes les qualités disponibles, marque les
+  qualités DRM `Unsupported` sans demander leur URL et ouvre les seules options
+  non DRM au moment de cette commande explicite ;
+- `GetStreamAsync(cid, préférence)` filtre d'abord DRM et préférence, puis ne
+  demande qu'une seule URL pour la lecture/probe.
+
+Une demande non DRM envoie `stream_type=dash`, `stream_type=hls7` ou
+`stream_type=hls` et exige des URLs HTTPS
+avec `https_watch_urls=true`. Le projet ne construit
+jamais `dash_widevine`, n'utilise pas `license_url` et rejette par précaution une
+réponse qui contiendrait une URL de licence. L'URL de lecture doit être HTTPS,
+reste seulement dans l'objet retourné et n'est ni journalisée ni mise en cache.
+Le paramètre Kodi `timeshift=10800` n'est pas utilisé : le timeshift avancé est
+hors MVP et sa fenêtre a provoqué des lectures accélérées suivies de fragments
+futurs en `404` lors du test ffmpeg.
+
+La réponse peut fournir `stream.url` ou `stream.watch_urls`. Comme la référence,
+le prototype retient la première entrée `watch_urls` exploitable et lit son
+`maxrate`; `stream.url` sert de fallback.
+
+## Points encore inconnus
+
+- durée réelle des cookies et du `power_guide_hash` ;
+- fréquence de rotation du jeton d'application ;
+- ordre contractuel et stabilité du tableau de chaînes ;
+- comportement exact de `401`, `403` et `429` selon l'abonnement ;
+- proportion réelle de chaînes non DRM pour le compte cible ;
+- lisibilité effective des MPD retournés avec ffprobe/ffmpeg ;
+- headers supplémentaires éventuellement nécessaires à la lecture d'un MPD.
+
+Ces éléments nécessitent des tests d'intégration explicites avec un compte réel.
+Ils ne sont pas inventés dans les tests unitaires.

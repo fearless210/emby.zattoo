@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "stream": {
+    "watch_urls": [
+      {
+        "url": "https://stream.invalid/drm/manifest.mpd?token=fixture-secret",
+        "maxrate": 6200,
+        "license_url": "https://license.invalid/widevine?token=fixture-secret"
+      }
+    ]
+  }
+}

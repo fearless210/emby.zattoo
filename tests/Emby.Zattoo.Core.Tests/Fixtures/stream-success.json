@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "stream": {
+    "url": "https://stream.invalid/fallback/manifest.mpd?token=fixture-secret",
+    "watch_urls": [
+      {
+        "url": "https://stream.invalid/live/manifest.mpd?token=fixture-secret",
+        "maxrate": 6200
+      }
+    ]
+  }
+}

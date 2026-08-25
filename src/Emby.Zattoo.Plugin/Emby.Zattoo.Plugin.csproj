@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Description>Emby Live TV tuner plugin for non-DRM Zattoo streams.</Description>
+    <AssemblyName>Emby.Zattoo</AssemblyName>
+    <RootNamespace>Emby.Zattoo.Plugin</RootNamespace>
+    <Version>0.2.0</Version>
+    <AssemblyVersion>0.2.0.0</AssemblyVersion>
+    <FileVersion>0.2.0.0</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediaBrowser.Server.Core" Version="4.9.1.90">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.IO.Pipelines" Version="8.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.Memory" Version="4.6.3">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Emby.Zattoo.Core\Emby.Zattoo.Core.csproj" />
+  </ItemGroup>
+
+  <Target Name="CreatePluginPackage" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <PropertyGroup>
+      <PluginPackageDirectory>$(MSBuildProjectDirectory)/../../artifacts/Emby.Zattoo</PluginPackageDirectory>
+    </PropertyGroup>
+    <MakeDir Directories="$(PluginPackageDirectory)" />
+    <Copy
+      SourceFiles="$(TargetPath);$(TargetDir)Emby.Zattoo.Core.dll"
+      DestinationFolder="$(PluginPackageDirectory)" />
+  </Target>
+</Project>

@@ -1,0 +1,42 @@
+{
+  "groups": [
+    {
+      "name": "Swiss"
+    }
+  ],
+  "channels": [
+    {
+      "cid": "ch-rts1",
+      "group_index": 0,
+      "qualities": [
+        {
+          "availability": "available",
+          "level": "hd",
+          "title": "RTS 1",
+          "logo_white_84": "/logos/rts1.png",
+          "drm_required": false
+        }
+      ]
+    },
+    {
+      "cid": "ch-rts2",
+      "group_index": 0,
+      "qualities": [
+        {
+          "availability": "unavailable",
+          "level": "fhd",
+          "title": "RTS 2 unavailable",
+          "logo_white_84": "/logos/rts2-old.png",
+          "drm_required": true
+        },
+        {
+          "availability": "available",
+          "level": "hd",
+          "title": "RTS 2",
+          "logo_white_84": "https://logos.zattic.com/logos/rts2.png",
+          "drm_required": false
+        }
+      ]
+    }
+  ]
+}

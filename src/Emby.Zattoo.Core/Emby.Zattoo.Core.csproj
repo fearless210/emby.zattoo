@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Description>Independent Zattoo session and channel client for Emby.Zattoo.</Description>
+    <AssemblyName>Emby.Zattoo.Core</AssemblyName>
+    <RootNamespace>Emby.Zattoo</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.6" />
+  </ItemGroup>
+</Project>

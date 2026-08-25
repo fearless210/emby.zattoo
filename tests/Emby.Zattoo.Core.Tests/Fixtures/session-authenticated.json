@@ -1,0 +1,12 @@
+{
+  "active": true,
+  "current_country": "CH",
+  "account": {
+    "service_country": "CH"
+  },
+  "nonlive": {
+    "replay_availability": "available",
+    "recording_number_limit": 0
+  },
+  "power_guide_hash": "fixture-guide-hash"
+}

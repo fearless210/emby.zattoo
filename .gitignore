@@ -1,0 +1,24 @@
+**/bin/
+**/obj/
+.vs/
+.vscode/
+.idea/
+.dotnet-cli/
+artifacts/
+*.user
+*.suo
+*.DotSettings.user
+*.nupkg
+TestResults/
+coverage/
+.DS_Store
+Thumbs.db
+
+# Local credentials and captures must never enter the repository.
+.env
+.env.*
+!.env.example
+*.har
+*.pcap
+*.pcapng
+artifacts/integration/
