@@ -8,6 +8,9 @@ namespace Emby.Zattoo.Plugin
 {
     internal sealed class ZattooRuntimeSettings
     {
+        private static readonly string ClientUserAgent = "Emby.Zattoo.Plugin/"
+            + (typeof(ZattooRuntimeSettings).Assembly.GetName().Version?.ToString(3) ?? "unknown");
+
         private ZattooRuntimeSettings(
             ZattooClientOptions clientOptions,
             ZattooPreferredQuality preferredQuality,
@@ -44,7 +47,7 @@ namespace Emby.Zattoo.Plugin
             {
                 Username = configuration.Username.Trim(),
                 Password = decryptedPassword,
-                UserAgent = "Emby.Zattoo.Plugin/0.2.0",
+                UserAgent = ClientUserAgent,
             };
 
             if (!Uri.TryCreate(

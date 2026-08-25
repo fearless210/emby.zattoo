@@ -1,6 +1,6 @@
 # Emby MVP — installation et validation
 
-Le plugin 0.2.0 compile contre le SDK Emby stable 4.9.5.0
+Le plugin 0.2.1 compile contre le SDK Emby stable 4.9.5.0
 et `MediaBrowser.Server.Core` 4.9.1.90. Il inclut une page de configuration
 native Emby. Le chargement dans le serveur Linux cible reste à valider.
 
@@ -53,12 +53,11 @@ Le build crée :
 
 ```text
 artifacts\Emby.Zattoo\Emby.Zattoo.dll
-artifacts\Emby.Zattoo\Emby.Zattoo.Core.dll
 ```
 
-Ces deux DLL constituent le paquet manuel du MVP. Les assemblies Emby et .NET
-sont fournies par Emby Server et ne doivent pas être copiées depuis NuGet dans
-le dossier des plugins.
+Cette DLL autonome constitue le paquet manuel du MVP. Les assemblies Emby et
+.NET sont fournies par Emby Server et ne doivent pas être copiées depuis NuGet
+dans le dossier des plugins.
 
 ## Installer sur Linux
 
@@ -66,9 +65,9 @@ le dossier des plugins.
 2. Arrêter Emby Server.
 3. Localiser le dossier `programdata/plugins` de cette installation. Son chemin
    varie selon paquet natif, Docker et volume personnalisé.
-4. Copier **les deux fichiers** `Emby.Zattoo.dll` et
-   `Emby.Zattoo.Core.dll` directement dans ce dossier.
-5. Vérifier qu'ils sont lisibles par l'utilisateur qui exécute Emby.
+4. Supprimer toute ancienne copie de `Emby.Zattoo.Core.dll`, puis copier
+   **`Emby.Zattoo.dll`** directement dans ce dossier.
+5. Vérifier qu'elle est lisible par l'utilisateur qui exécute Emby.
 6. Démarrer Emby Server.
 7. Vérifier dans le log serveur :
 

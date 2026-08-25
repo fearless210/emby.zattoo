@@ -49,7 +49,7 @@ en charge dans cette version.
 
 ## État du projet
 
-La version actuelle est `0.2.0` et cible la branche stable Emby 4.9.
+La version actuelle est `0.2.1` et cible la branche stable Emby 4.9.
 
 | Validation | État |
 | --- | --- |
@@ -76,10 +76,10 @@ des essais.
 
 ### 1. Télécharger le plugin
 
-Télécharger `Emby.Zattoo-v0.2.0.zip` depuis la
-[release v0.2.0](https://github.com/fearless210/emby.zattoo/releases/tag/v0.2.0),
-puis extraire les deux DLL. Elles sont également proposées séparément dans les
-assets de la release. Le fichier `SHA256SUMS.txt` permet d'en vérifier
+Télécharger `Emby.Zattoo-v0.2.1.zip` depuis la
+[release v0.2.1](https://github.com/fearless210/emby.zattoo/releases/tag/v0.2.1),
+puis extraire `Emby.Zattoo.dll`. La DLL est également proposée séparément dans
+les assets de la release. Le fichier `SHA256SUMS.txt` permet d'en vérifier
 l'intégrité.
 
 Pour construire le plugin depuis les sources à la place, le SDK .NET 8 est
@@ -93,17 +93,17 @@ Sous une installation locale où `dotnet` n'est pas encore dans le `PATH`, la
 même commande peut être lancée avec la fonction PowerShell `dotnet8` utilisée
 pendant le développement.
 
-Le build Release produit les deux fichiers à installer :
+Le build Release produit le fichier à installer :
 
 ```text
 artifacts/Emby.Zattoo/Emby.Zattoo.dll
-artifacts/Emby.Zattoo/Emby.Zattoo.Core.dll
 ```
 
-### 2. Copier les DLL sur le serveur
+### 2. Copier la DLL sur le serveur
 
 1. Arrêter Emby Server.
-2. Copier **les deux DLL** directement dans le dossier `programdata/plugins` de
+2. Supprimer toute ancienne copie de `Emby.Zattoo.Core.dll`, puis copier
+   **`Emby.Zattoo.dll`** directement dans le dossier `programdata/plugins` de
    l'installation Emby. Son emplacement dépend du paquet Linux, du conteneur
    Docker ou des volumes configurés.
 3. Vérifier que l'utilisateur Emby peut lire les fichiers.
@@ -159,7 +159,7 @@ dotnet test Emby.Zattoo.sln --configuration Release --no-build --no-restore
 dotnet format Emby.Zattoo.sln --verify-no-changes --no-restore
 ```
 
-La CI GitHub exécute les mêmes contrôles sous Linux et publie les deux DLL comme
+La CI GitHub exécute les mêmes contrôles sous Linux et publie la DLL comme
 artifact temporaire. Aucun test automatisé ne contacte Zattoo : les fixtures de
 `tests/` sont entièrement fictives.
 
@@ -207,7 +207,9 @@ docs/                       Analyses, décisions et guides de validation
 
 Le Core cible `netstandard2.0` afin de rester compatible avec le serveur Emby.
 Le CLI et les tests ciblent `net8.0`. `IZattooTransport` isole les appels HTTP
-et les cookies, ce qui permet aux tests d'injecter un transport en mémoire.
+et les cookies, ce qui permet aux tests d'injecter un transport en mémoire. Le
+build du plugin inclut les sources du Core dans `Emby.Zattoo.dll` afin de ne pas
+dépendre du chargement d'une assembly secondaire par Emby.
 
 ## Sécurité et limites
 

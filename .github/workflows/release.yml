@@ -48,13 +48,11 @@ jobs:
         run: |
           mkdir -p release/Emby.Zattoo
           cp artifacts/Emby.Zattoo/Emby.Zattoo.dll release/Emby.Zattoo/
-          cp artifacts/Emby.Zattoo/Emby.Zattoo.Core.dll release/Emby.Zattoo/
           (cd release && zip -r "Emby.Zattoo-${GITHUB_REF_NAME}.zip" Emby.Zattoo)
           (
             cd release
             sha256sum \
               Emby.Zattoo/Emby.Zattoo.dll \
-              Emby.Zattoo/Emby.Zattoo.Core.dll \
               "Emby.Zattoo-${GITHUB_REF_NAME}.zip" \
               > SHA256SUMS.txt
           )
@@ -65,7 +63,6 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             artifacts/Emby.Zattoo/Emby.Zattoo.dll \
-            artifacts/Emby.Zattoo/Emby.Zattoo.Core.dll \
             "release/Emby.Zattoo-${GITHUB_REF_NAME}.zip" \
             release/SHA256SUMS.txt \
             --verify-tag \
