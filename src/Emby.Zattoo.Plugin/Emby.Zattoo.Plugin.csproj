@@ -4,9 +4,9 @@
     <Description>Emby Live TV tuner plugin for non-DRM Zattoo streams.</Description>
     <AssemblyName>Emby.Zattoo</AssemblyName>
     <RootNamespace>Emby.Zattoo.Plugin</RootNamespace>
-    <Version>0.2.1</Version>
-    <AssemblyVersion>0.2.1.0</AssemblyVersion>
-    <FileVersion>0.2.1.0</FileVersion>
+    <Version>0.2.2</Version>
+    <AssemblyVersion>0.2.2.0</AssemblyVersion>
+    <FileVersion>0.2.2.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

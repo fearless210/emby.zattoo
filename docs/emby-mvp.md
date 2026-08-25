@@ -1,6 +1,6 @@
 # Emby MVP — installation et validation
 
-Le plugin 0.2.1 compile contre le SDK Emby stable 4.9.5.0
+Le plugin 0.2.2 compile contre le SDK Emby stable 4.9.5.0
 et `MediaBrowser.Server.Core` 4.9.1.90. Il inclut une page de configuration
 native Emby. Le chargement dans le serveur Linux cible reste à valider.
 

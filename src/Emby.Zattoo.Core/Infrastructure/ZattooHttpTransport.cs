@@ -135,19 +135,32 @@ namespace Emby.Zattoo.Infrastructure
             }
         }
 
-        private Uri CreateRequestUri(string relativePath)
+        internal Uri CreateRequestUri(string relativePath)
         {
             if (string.IsNullOrWhiteSpace(relativePath))
             {
                 throw new ArgumentException("A relative path is required.", nameof(relativePath));
             }
 
-            if (Uri.TryCreate(relativePath, UriKind.Absolute, out _))
+            var normalized = relativePath.Trim();
+            if (normalized.StartsWith("//", StringComparison.Ordinal)
+                || normalized.IndexOf('\\') >= 0
+                || normalized.IndexOfAny(new[] { '\r', '\n' }) >= 0
+                || (!normalized.StartsWith("/", StringComparison.Ordinal)
+                    && Uri.TryCreate(normalized, UriKind.Absolute, out _)))
             {
                 throw new ArgumentException("Only provider-relative paths are allowed.", nameof(relativePath));
             }
 
-            return new Uri(baseUri, relativePath);
+            var requestUri = new Uri(baseUri, normalized);
+            if (!string.Equals(requestUri.Scheme, baseUri.Scheme, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(requestUri.Host, baseUri.Host, StringComparison.OrdinalIgnoreCase)
+                || requestUri.Port != baseUri.Port)
+            {
+                throw new ArgumentException("Only provider-relative paths are allowed.", nameof(relativePath));
+            }
+
+            return requestUri;
         }
 
         private void ThrowIfDisposed()

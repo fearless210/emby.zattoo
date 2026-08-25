@@ -49,7 +49,7 @@ en charge dans cette version.
 
 ## État du projet
 
-La version actuelle est `0.2.1` et cible la branche stable Emby 4.9.
+La version actuelle est `0.2.2` et cible la branche stable Emby 4.9.
 
 | Validation | État |
 | --- | --- |
@@ -76,8 +76,8 @@ des essais.
 
 ### 1. Télécharger le plugin
 
-Télécharger `Emby.Zattoo-v0.2.1.zip` depuis la
-[release v0.2.1](https://github.com/fearless210/emby.zattoo/releases/tag/v0.2.1),
+Télécharger `Emby.Zattoo-v0.2.2.zip` depuis la
+[release v0.2.2](https://github.com/fearless210/emby.zattoo/releases/tag/v0.2.2),
 puis extraire `Emby.Zattoo.dll`. La DLL est également proposée séparément dans
 les assets de la release. Le fichier `SHA256SUMS.txt` permet d'en vérifier
 l'intégrité.
