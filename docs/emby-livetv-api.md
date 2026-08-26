@@ -64,7 +64,8 @@ protected abstract Task<List<MediaSourceInfo>> GetChannelStreamMediaSources(...)
 
 Le MVP dérive finalement de `BaseTunerHost`. Les signatures ont été validées par
 compilation contre `MediaBrowser.Server.Core` 4.9.1.90 et par inspection de
-l'assembly officiel. Le chargement dans un serveur Emby réel reste à valider.
+l'assembly officiel. Le chargement et le routage du tuner ont également été
+validés sur Emby Server 4.9.5.0 sous Linux.
 
 ## Mapping des chaînes
 
@@ -113,12 +114,15 @@ Le tuner demande une URL Zattoo fraîche uniquement dans `ILiveStream.Open`,
 jamais au chargement des chaînes. Il résout le master HLS7 en mémoire vers une
 variante vidéo et l'audio par défaut, puis possède un processus FFmpeg serveur
 qui remuxe sans réencodage vers MPEG-TS. La source communiquée à Emby emploie un
-chemin virtuel `zattoo://<cid>` : aucun cookie ni URL signée n'est remis au
-client.
+chemin virtuel `zattoo://<cid>` avant son ouverture. Une fois le processus de
+remux démarré, ce chemin est remplacé par le point d'accès local Emby
+`/LiveTv/LiveStreamFiles/<id>/stream.ts`, lequel consomme
+`ILiveStream.CopyToAsync`. Aucun cookie ni URL signée n'est remis au client.
 
 Le MVP annonce `mpegts`, désactive Direct Play, autorise Direct Stream et
-Transcoding, et exige `Open`/`Close`. Cette combinaison doit encore être validée
-dans Emby Web puis sur le client Tizen.
+Transcoding, et exige `Open`/`Close`. Cette combinaison est validée pour la
+lecture de RTS 1 HD dans Emby Web. Le client Tizen et les changements répétés
+restent à tester.
 
 ## Cycle de vie d'un stream
 
@@ -153,11 +157,10 @@ une `ChannelInfo`, une plage `DateTimeOffset` et un `CancellationToken`.
 L'EPG n'est pas implémenté pendant cette tâche. Son cache et la coalescence des
 requêtes identiques seront conçus au Milestone 5.
 
-## Incertitudes à lever sur un serveur réel
+## Incertitudes restantes
 
-- version exacte de `MediaBrowser.Server.Core` embarquée par le serveur cible ;
 - comportement DASH direct de chaque client Emby ;
-- validation de la combinaison `Protocol`/`Container`/`Formats` dans Emby Web ;
-- validation du chargement de `BaseTunerHost` sans périphérique réseau physique ;
 - comportement réel de fermeture de stream lors d'un arrêt ou changement de
-  chaîne côté client.
+  chaîne côté client ;
+- stabilité lors d'une lecture longue et de changements répétés ;
+- comportement du client Samsung Tizen.

@@ -6,8 +6,10 @@ flux Zattoo, sélectionne la vidéo et l'audio, puis les remuxe en MPEG-TS pour
 les clients Emby, sans réencodage.
 
 > **Projet non officiel et expérimental.** Il n'est affilié ni à Zattoo ni à
-> Emby. Le transport a été validé pendant cinq minutes, mais le chargement et la
-> lecture sur un serveur Emby Linux réel restent à tester.
+> Emby. Le transport a été validé pendant cinq minutes. Le chargement, la
+> configuration, l'import des chaînes et la lecture d'une chaîne ont été
+> validés sur Emby Linux. Les changements répétés et la lecture longue restent
+> à tester.
 
 ## Pourquoi ce projet ?
 
@@ -49,7 +51,7 @@ en charge dans cette version.
 
 ## État du projet
 
-La version actuelle est `0.2.2` et cible la branche stable Emby 4.9.
+La version actuelle est `0.2.4` et cible la branche stable Emby 4.9.
 
 | Validation | État |
 | --- | --- |
@@ -57,8 +59,11 @@ La version actuelle est `0.2.2` et cible la branche stable Emby 4.9.
 | Inventaire observé | 493 chaînes, dont 264 avec au moins un flux non-DRM |
 | Lecture HLS et remux FFmpeg | Validés sur RTS 1 HD pendant 300,7 s, sans fragment manquant ni corruption |
 | Compilation et tests automatisés | Validés sous .NET 8 ; les tests utilisent uniquement des données fictives |
-| Chargement du plugin sur Emby Linux | À tester |
-| Lecture Emby Web et changements de chaîne | À tester |
+| Chargement, configuration et import sur Emby Linux | Validés sur Emby 4.9.5.0 |
+| Routage des chaînes vers le tuner Emby | Validé sur Emby 4.9.5.0 |
+| Exposition du remux via le point d'accès Live Stream interne | Validée sur Emby 4.9.5.0 |
+| Lecture Emby Web | Validée sur RTS 1 HD |
+| Arrêt, changements de chaîne et lecture longue | À tester |
 | Client Samsung Tizen et test longue durée | Étape ultérieure |
 
 Les chiffres du catalogue dépendent de l'abonnement, de la région et du compte
@@ -76,8 +81,8 @@ des essais.
 
 ### 1. Télécharger le plugin
 
-Télécharger `Emby.Zattoo-v0.2.2.zip` depuis la
-[release v0.2.2](https://github.com/fearless210/emby.zattoo/releases/tag/v0.2.2),
+Télécharger `Emby.Zattoo-v0.2.4.zip` depuis la
+[release v0.2.4](https://github.com/fearless210/emby.zattoo/releases/tag/v0.2.4),
 puis extraire `Emby.Zattoo.dll`. La DLL est également proposée séparément dans
 les assets de la release. Le fichier `SHA256SUMS.txt` permet d'en vérifier
 l'intégrité.
@@ -109,6 +114,11 @@ artifacts/Emby.Zattoo/Emby.Zattoo.dll
 3. Vérifier que l'utilisateur Emby peut lire les fichiers.
 4. Redémarrer Emby Server.
 5. Vérifier la présence de `Zattoo Live TV` dans **Dashboard → Plugins**.
+
+Lors d'une mise à niveau depuis la version `0.2.2`, supprimer puis recréer la
+source TV **Zattoo** dans **Live TV** après le redémarrage. Cette opération force
+Emby à remplacer les anciens identifiants de chaînes non préfixés. Les
+identifiants Zattoo enregistrés dans la page du plugin sont conservés.
 
 Les assemblies Emby et .NET sont fournies par le serveur et ne doivent pas être
 copiées depuis les paquets NuGet.
@@ -248,6 +258,7 @@ d'intégration au catalogue Emby.
 
 ## Documentation
 
+- [Changelog](CHANGELOG.md)
 - [Installation et validation du MVP Emby](docs/emby-mvp.md)
 - [Rapport de faisabilité et décisions GO / NO-GO](docs/feasibility.md)
 - [Guide du Stream Spike](docs/stream-spike.md)

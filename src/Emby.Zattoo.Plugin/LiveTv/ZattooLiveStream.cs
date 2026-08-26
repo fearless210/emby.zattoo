@@ -25,6 +25,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
         private readonly IZattooClient client;
         private readonly ZattooPreferredQuality preferredQuality;
         private readonly string ffmpegPath;
+        private readonly string localApiUrl;
         private readonly ILogger logger;
         private readonly SemaphoreSlim lifecycleLock = new SemaphoreSlim(1, 1);
         private Process? process;
@@ -41,6 +42,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
             IZattooClient client,
             ZattooPreferredQuality preferredQuality,
             string ffmpegPath,
+            string localApiUrl,
             ILogger logger)
         {
             TunerHostId = tunerHostId ?? string.Empty;
@@ -49,6 +51,8 @@ namespace Emby.Zattoo.Plugin.LiveTv
             this.client = client ?? throw new ArgumentNullException(nameof(client));
             this.preferredQuality = preferredQuality;
             this.ffmpegPath = string.IsNullOrWhiteSpace(ffmpegPath) ? "ffmpeg" : ffmpegPath;
+            this.localApiUrl = localApiUrl
+                ?? throw new ArgumentNullException(nameof(localApiUrl));
             this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
             UniqueId = Guid.NewGuid().ToString("N");
             MediaSource = ZattooMediaSourceFactory.Create(channelId, this.channelName);
@@ -137,6 +141,10 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 process = newProcess;
                 stderrMonitor = newStderrMonitor;
                 DateOpened = DateTimeOffset.UtcNow;
+                ZattooMediaSourceFactory.UseLocalLiveStreamEndpoint(
+                    MediaSource,
+                    localApiUrl,
+                    UniqueId);
             }
             finally
             {

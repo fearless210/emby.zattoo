@@ -33,9 +33,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
 
         public override string Type => "zattoo";
 
-        protected override string LegacyChannelIdPrefix => "zattoo:";
-
-        protected override bool UseTunerHostIdAsPrefix => false;
+        protected override bool UseTunerHostIdAsPrefix => true;
 
         public override bool SupportsGuideData(TunerHostInfo tuner)
         {
@@ -69,7 +67,12 @@ namespace Emby.Zattoo.Plugin.LiveTv
             var selected = tuner.ImportFavoritesOnly
                 ? channels.Where(channel => channel.IsFavorite)
                 : channels;
-            var result = selected.Select(ZattooChannelMapper.Map).ToList();
+            var channelIdPrefix = GetChannelIdPrefix(tuner);
+            var result = selected
+                .Select(channel => ZattooChannelMapper.Map(
+                    channel,
+                    channelIdPrefix))
+                .ToList();
             Logger.Info("Loaded {0} Zattoo channels.", result.Count);
             return result;
         }
@@ -104,6 +107,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 context.Client,
                 context.Settings.PreferredQuality,
                 context.Settings.FfmpegPath,
+                AppHost.GetLocalApiUrl("127.0.0.1"),
                 Logger);
             return Task.FromResult(stream);
         }

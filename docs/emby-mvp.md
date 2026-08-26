@@ -1,8 +1,10 @@
 # Emby MVP — installation et validation
 
-Le plugin 0.2.2 compile contre le SDK Emby stable 4.9.5.0
+Le plugin 0.2.4 compile contre le SDK Emby stable 4.9.5.0
 et `MediaBrowser.Server.Core` 4.9.1.90. Il inclut une page de configuration
-native Emby. Le chargement dans le serveur Linux cible reste à valider.
+native Emby. Son chargement, sa configuration et l'import des chaînes ont été
+validés sur Emby Linux. La lecture de RTS 1 HD fonctionne dans Emby Web ; les
+tests d'arrêt, de changement de chaîne et de longue durée restent à effectuer.
 
 ## Architecture du MVP
 
@@ -34,7 +36,7 @@ par `Close()`.
 - mot de passe chiffré par `IEncryptionManager` et masqué côté navigateur ;
 - tuner `zattoo` avec un flux simultané par défaut ;
 - chaînes TV, numéros, favoris et logos ;
-- identité stable fondée sur le `cid`, avec préfixe Emby `zattoo:` ;
+- identité stable fondée sur le `cid`, avec préfixe propre à la source TV Emby ;
 - qualité `Auto`, `1080p`, `720p` ou `540p` par environnement ;
 - HLS7 non DRM résolu à la demande ;
 - remux serveur H.264/AAC vers MPEG-TS avec `-c copy` ;

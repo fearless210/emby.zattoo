@@ -24,4 +24,38 @@ public sealed class ZattooMediaSourceFactoryTests
         Assert.True(source.SupportsTranscoding);
         Assert.DoesNotContain("http", source.Path, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void UseLocalLiveStreamEndpoint_ExposesCopyToThroughEmby()
+    {
+        var source = ZattooMediaSourceFactory.Create("tsr1", "RTS 1 HD");
+
+        ZattooMediaSourceFactory.UseLocalLiveStreamEndpoint(
+            source,
+            "http://127.0.0.1:8096/",
+            "stream-id");
+
+        Assert.Equal(
+            "http://127.0.0.1:8096/LiveTv/LiveStreamFiles/stream-id/stream.ts",
+            source.Path);
+        Assert.Equal(MediaProtocol.Http, source.Protocol);
+        Assert.False(source.IsRemote);
+        Assert.False(source.RequiresLooping);
+        Assert.False(source.SupportsDirectPlay);
+        Assert.True(source.SupportsDirectStream);
+        Assert.True(source.SupportsTranscoding);
+        Assert.DoesNotContain("zattoo://", source.Path, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void UseLocalLiveStreamEndpoint_RejectsNonHttpApiUrl()
+    {
+        var source = ZattooMediaSourceFactory.Create("tsr1", "RTS 1 HD");
+
+        Assert.Throws<ArgumentException>(() =>
+            ZattooMediaSourceFactory.UseLocalLiveStreamEndpoint(
+                source,
+                "file:///var/lib/emby",
+                "stream-id"));
+    }
 }

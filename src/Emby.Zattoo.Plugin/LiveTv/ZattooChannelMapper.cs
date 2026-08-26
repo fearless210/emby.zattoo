@@ -9,16 +9,25 @@ namespace Emby.Zattoo.Plugin.LiveTv
 {
     public static class ZattooChannelMapper
     {
-        public static ChannelInfo Map(ZattooChannel channel)
+        public static ChannelInfo Map(
+            ZattooChannel channel,
+            string embyChannelIdPrefix)
         {
             if (channel == null)
             {
                 throw new ArgumentNullException(nameof(channel));
             }
 
+            if (string.IsNullOrWhiteSpace(embyChannelIdPrefix))
+            {
+                throw new ArgumentException(
+                    "The Emby channel ID prefix is required.",
+                    nameof(embyChannelIdPrefix));
+            }
+
             return new ChannelInfo
             {
-                Id = channel.Id,
+                Id = embyChannelIdPrefix + channel.Id,
                 TunerChannelId = channel.Id,
                 Name = channel.Name,
                 Number = channel.Number.ToString(CultureInfo.InvariantCulture),

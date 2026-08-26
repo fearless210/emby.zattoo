@@ -27,9 +27,9 @@ public sealed class ZattooChannelMapperTests
             },
         };
 
-        var result = ZattooChannelMapper.Map(channel);
+        var result = ZattooChannelMapper.Map(channel, "tuner-host_");
 
-        Assert.Equal("tsr1", result.Id);
+        Assert.Equal("tuner-host_tsr1", result.Id);
         Assert.Equal("tsr1", result.TunerChannelId);
         Assert.Equal("RTS 1 HD", result.Name);
         Assert.Equal("1", result.Number);
@@ -54,8 +54,21 @@ public sealed class ZattooChannelMapperTests
             },
         };
 
-        var result = ZattooChannelMapper.Map(channel);
+        var result = ZattooChannelMapper.Map(channel, "tuner-host_");
 
         Assert.False(result.IsHD);
+    }
+
+    [Fact]
+    public void Map_RejectsMissingEmbyChannelIdPrefix()
+    {
+        var channel = new ZattooChannel
+        {
+            Id = "tsr1",
+            Name = "RTS 1 HD",
+        };
+
+        Assert.Throws<ArgumentException>(() =>
+            ZattooChannelMapper.Map(channel, string.Empty));
     }
 }
