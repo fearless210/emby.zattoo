@@ -38,6 +38,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
         private CancellationTokenSource? streamCancellation;
         private Task? stderrMonitor;
         private IDisposable? capacityLease;
+        private int consumerNumber;
         private int duplicateMoovWarnings;
         private bool closing;
 
@@ -309,20 +310,37 @@ namespace Emby.Zattoo.Plugin.LiveTv
             // when media detection runs before a transcode. Consumers are served
             // one after another from the same pipe: a new one resumes at the
             // current position, which is what live television means anyway.
+            var consumer = Interlocked.Increment(ref consumerNumber);
             if (!await consumerGate.TryEnterAsync(
                     ConsumerHandoverTimeout,
                     cancellationToken).ConfigureAwait(false))
             {
-                throw new InvalidOperationException(
+                var refused = new InvalidOperationException(
                     "This Zattoo live stream already has an active consumer.");
+                logger.ErrorException(
+                    "Zattoo live stream consumer {0} refused for channel {1}.",
+                    refused,
+                    consumer,
+                    channelName);
+                throw refused;
             }
 
+            var attachedAt = DateTimeOffset.UtcNow;
+            logger.Info(
+                "Zattoo live stream consumer {0} attached for channel {1}.",
+                consumer,
+                channelName);
             try
             {
                 var currentProcess = process
                     ?? throw new InvalidOperationException("The Zattoo live stream is not open.");
                 var currentCancellation = streamCancellation
                     ?? throw new InvalidOperationException("The Zattoo live stream is not open.");
+                if (closing)
+                {
+                    throw new InvalidOperationException(
+                        "This Zattoo live stream is already closing.");
+                }
                 using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
                     cancellationToken,
                     currentCancellation.Token))
@@ -353,14 +371,20 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 // Emby only reports HTTP 500 to the client for this endpoint, so the
                 // reason has to reach the server log from here.
                 logger.ErrorException(
-                    "Zattoo live stream copy failed for channel {0}.",
+                    "Zattoo live stream consumer {0} failed for channel {1}.",
                     exception,
+                    consumer,
                     channelName);
                 throw;
             }
             finally
             {
                 consumerGate.Exit();
+                logger.Info(
+                    "Zattoo live stream consumer {0} detached from channel {1} after {2:F1}s.",
+                    consumer,
+                    channelName,
+                    (DateTimeOffset.UtcNow - attachedAt).TotalSeconds);
             }
         }
 

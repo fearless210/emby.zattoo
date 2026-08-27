@@ -34,7 +34,9 @@ dupliquée ici.
 ### Optimisé
 
 - journalisation de la cause réelle d'un échec de copie du flux, qu'Emby ne
-  rapporte au client que sous la forme d'un `HTTP 500`.
+  rapporte au client que sous la forme d'un `HTTP 500` ;
+- journalisation numérotée des rattachements au flux, avec leur durée, afin de
+  distinguer un problème de remux d'un problème de transcodage côté serveur.
 
 ### Tests
 
