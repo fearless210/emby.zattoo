@@ -4,6 +4,39 @@ Ce fichier recense les changements notables des versions publiées. Les commits
 et les tags Git constituent l'historique de référence ; aucune date n'est
 dupliquée ici.
 
+## 1.1.1 — Corrections de fiabilité
+
+### Corrigé
+
+- lecture des chaînes dont toutes les qualités non-DRM dépassent le plafond de
+  qualité choisi : la préférence agit comme un plafond de débit et non comme une
+  condition de lecture, avec repli sur la qualité disponible la plus basse ;
+- import du catalogue lorsque l'endpoint des favoris échoue : les favoris
+  décorent désormais les chaînes sans pouvoir empêcher leur chargement, et le
+  tuner refuse le rafraîchissement plutôt que d'importer une liste vide lorsque
+  l'option Emby **Import favorites only** est active ;
+- processus FFmpeg résiduel lorsqu'un flux échouait après le démarrage du remux :
+  l'URL locale Emby est validée avant tout démarrage et le processus est arrêté
+  si l'ouverture échoue malgré tout ;
+- accumulation des clients retirés à chaque sauvegarde de la configuration, qui
+  conservait un `HttpClient`, le cache du guide et le cache des détails jusqu'à
+  l'arrêt du serveur ;
+- capacité de flux simultanés ramenée à 1 lors d'un changement de configuration,
+  qui refusait un second flux légitime pendant un enregistrement jusqu'au
+  rafraîchissement suivant des chaînes ;
+- gel du tuner pendant l'arrêt de l'enrichissement du guide : cet arrêt, qui
+  attend le worker, ne se produit plus en tenant le verrou du client.
+
+### Tests
+
+- repli de qualité lorsqu'aucun niveau ne tient sous le plafond, et priorité
+  conservée pour un niveau de résolution inconnue ;
+- chargement du catalogue avec des favoris en erreur HTTP, en réponse malformée
+  et en `401` répétés imposant un renouvellement de session ;
+- cohérence entre la validation de l'URL locale Emby et son utilisation ;
+- politique de retraite des clients : période de grâce, libération unique,
+  libération sélective et vidage complet.
+
 ## 1.1.0 — Chaînes lisibles et capacités du compte
 
 ### Ajouté

@@ -1,6 +1,6 @@
 # Emby MVP — installation et validation
 
-Le plugin 1.1.0 compile contre le SDK Emby stable 4.9.5.0
+Le plugin 1.1.1 compile contre le SDK Emby stable 4.9.5.0
 et `MediaBrowser.Server.Core` 4.9.1.90. Il inclut une page de configuration
 native Emby. Son chargement, sa configuration et l'import des chaînes ont été
 validés sur Emby Linux. La lecture de RTS 1 HD, l'arrêt, le changement de chaîne,

@@ -27,7 +27,9 @@ public sealed class ZattooRuntimeSettingsTests
         Assert.Equal("user@example.invalid", settings.ClientOptions.Username);
         Assert.Equal("decrypted-test-password", settings.ClientOptions.Password);
         Assert.Equal(new Uri("https://zattoo.example/"), settings.ClientOptions.ProviderBaseUri);
-        Assert.Equal("Emby.Zattoo.Plugin/1.1.0", settings.ClientOptions.UserAgent);
+        Assert.Matches(
+            @"^Emby\.Zattoo\.Plugin/\d+\.\d+\.\d+$",
+            settings.ClientOptions.UserAgent);
         Assert.False(settings.ClientOptions.EnableBackgroundGuideDetails);
         Assert.Equal(ZattooPreferredQuality.P720, settings.PreferredQuality);
         Assert.Equal(

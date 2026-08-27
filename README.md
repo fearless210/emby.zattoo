@@ -88,8 +88,8 @@ des essais.
 
 ### 1. Télécharger le plugin
 
-Télécharger `Emby.Zattoo-v1.1.0.zip` depuis la
-[release v1.1.0](https://github.com/fearless210/emby.zattoo/releases/tag/v1.1.0),
+Télécharger `Emby.Zattoo-v1.1.1.zip` depuis la
+[release v1.1.1](https://github.com/fearless210/emby.zattoo/releases/tag/v1.1.1),
 puis extraire `Emby.Zattoo.dll`. La DLL est également proposée séparément dans
 les assets de la release. Le fichier `SHA256SUMS.txt` permet d'en vérifier
 l'intégrité.
@@ -325,6 +325,7 @@ d'intégration au catalogue Emby.
 ## Documentation
 
 - [Changelog](CHANGELOG.md)
+- [Notes de la version 1.1.1](docs/releases/v1.1.1.md)
 - [Notes de la version 1.1.0](docs/releases/v1.1.0.md)
 - [Notes de la version 1.0.0](docs/releases/v1.0.0.md)
 - [Installation et validation du MVP Emby](docs/emby-mvp.md)
