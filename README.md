@@ -39,11 +39,11 @@ déchiffre pas les chaînes protégées et ne contourne aucun DRM.
 | Domaine | Ce que fournit le plugin |
 | --- | --- |
 | Compte | Initialisation et authentification Zattoo, avec un renouvellement de session après `401` ou `403` |
-| Chaînes | Import des noms, numéros, favoris et logos dans le tuner Emby |
+| Chaînes | Import des noms, numéros, favoris et logos, avec filtrage recommandé sur les seules chaînes réellement lisibles sans DRM |
 | Lecture | URL HLS7 non-DRM obtenue à la demande, avec une variante vidéo et l'audio par défaut |
-| Qualité | Sélection `Auto`, `1080p`, `720p` ou `540p` |
+| Qualité | Sélection `Auto` de la meilleure qualité disponible non-DRM du compte, ou plafond manuel `1080p`, `720p` ou `540p` |
 | Transport | Remux H.264/AAC vers MPEG-TS par FFmpeg avec `-c copy`, sans réencodage |
-| Guide TV | EPG Zattoo chargé par la tâche native Emby jusqu'à 14 jours, cache partagé et enrichissement persistant des descriptions |
+| Guide TV | EPG Zattoo limité aux chaînes importées, chargé par la tâche native Emby jusqu'à 14 jours, cache partagé et enrichissement persistant des descriptions |
 | Configuration | Page **Settings** native dans le tableau de bord Emby |
 | Sécurité | Mot de passe chiffré par Emby, secret masqué dans l'interface et données sensibles retirées des logs |
 
@@ -72,7 +72,6 @@ la lecture Live, le guide enrichi et le parcours DVR validés sur serveur réel.
 | Import EPG par la tâche native Emby | Validé sur 7 jours et 114 740 programmes ; premier import en 7 min 16 s, second en 6 min 04 s |
 | Détails EPG | Enrichissement persistant validé dans Emby ; descriptions visibles et seulement 213 détails chargés après reprise d'un cache existant |
 | Planification et exécution d'un enregistrement | Validées avec création de la médiathèque et fichier lisible |
-| Client Samsung Tizen | Validation différée |
 
 Les chiffres du catalogue dépendent de l'abonnement, de la région et du compte
 utilisés. Voir le [rapport de faisabilité](docs/feasibility.md) pour le détail
@@ -89,8 +88,8 @@ des essais.
 
 ### 1. Télécharger le plugin
 
-Télécharger `Emby.Zattoo-v1.0.0.zip` depuis la
-[release v1.0.0](https://github.com/fearless210/emby.zattoo/releases/tag/v1.0.0),
+Télécharger `Emby.Zattoo-v1.1.0.zip` depuis la
+[release v1.1.0](https://github.com/fearless210/emby.zattoo/releases/tag/v1.1.0),
 puis extraire `Emby.Zattoo.dll`. La DLL est également proposée séparément dans
 les assets de la release. Le fichier `SHA256SUMS.txt` permet d'en vérifier
 l'intégrité.
@@ -140,6 +139,7 @@ Ouvrir **Dashboard → Plugins → Zattoo Live TV → Settings**, puis renseigne
 | Zattoo username | Adresse e-mail ou nom du compte |
 | Zattoo password | Mot de passe du compte ; il sera chiffré côté serveur |
 | Preferred quality | `Auto`, `1080p`, `720p` ou `540p` |
+| Channel import mode | `Playable channels only` est recommandé ; les modes élargis servent au diagnostic ou conservent les chaînes temporairement indisponibles |
 | Enrich guide descriptions | Recommandé ; charge progressivement les descriptions et genres manquants sans bloquer Emby |
 | FFmpeg executable | Chemin absolu Linux recommandé, par exemple `/usr/bin/ffmpeg` |
 | Provider URL | Conserver `https://zattoo.com/`, sauf compte d'un revendeur compatible |
@@ -149,7 +149,10 @@ Enregistrer, puis ouvrir **Live TV → Tuner Devices → Add**, sélectionner
 **Zattoo** et actualiser les chaînes. L'option Emby **Import favorites only** est
 prise en charge. La tâche Emby **Actualiser le guide** appelle directement le
 fournisseur EPG du tuner. Emby utilise sept jours par défaut et permet d'en
-configurer jusqu'à quatorze. Le MVP limite le tuner à un flux simultané.
+configurer jusqu'à quatorze. Le plugin ajuste le nombre de tuners à la capacité
+du compte : cela permet, lorsque l'abonnement l'autorise, de regarder une chaîne
+pendant qu'Emby en enregistre une autre. Il ne met pas en place de gestion
+multi-utilisateur propre au plugin.
 
 Le protocole de validation complet se trouve dans le
 [guide d'installation et de test Emby](docs/emby-mvp.md).
@@ -176,7 +179,17 @@ Le plugin implémente le fournisseur de guide du tuner Emby. Lors de la tâche
 charge les données JSON Zattoo en fenêtres de cinq heures et conserve chaque
 fenêtre pendant 30 minutes. Comme une réponse contient plusieurs chaînes, les
 appels suivants réutilisent les données déjà chargées au lieu de solliciter le
-fournisseur pour chaque chaîne.
+fournisseur pour chaque chaîne. Seules les chaînes retenues par le mode d'import
+et, le cas échéant, par **Import favorites only** sont matérialisées dans le
+cache EPG et proposées à l'enrichissement détaillé.
+
+Les capacités sont déterminées depuis les valeurs techniques de la session et
+du catalogue, sans dépendre d'un nom commercial d'abonnement. Le mode `Auto`
+choisit la meilleure qualité disponible non-DRM. La limite de flux simultanés
+est utilisée à la fois par le tuner Emby et par un verrou interne au plugin. Si
+le fournisseur ne publie pas directement cette limite, une valeur prudente est
+inférée depuis ses limites numériques d'enregistrement ; cette origine est
+indiquée dans les logs.
 
 Les programmes sont filtrés sur la plage demandée, dédupliqués et transmis à
 Emby avec un `ShowId` Zattoo stable. Emby construit ensuite son propre
@@ -312,6 +325,7 @@ d'intégration au catalogue Emby.
 ## Documentation
 
 - [Changelog](CHANGELOG.md)
+- [Notes de la version 1.1.0](docs/releases/v1.1.0.md)
 - [Notes de la version 1.0.0](docs/releases/v1.0.0.md)
 - [Installation et validation du MVP Emby](docs/emby-mvp.md)
 - [Rapport de faisabilité et décisions GO / NO-GO](docs/feasibility.md)

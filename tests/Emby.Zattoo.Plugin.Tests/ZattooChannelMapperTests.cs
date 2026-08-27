@@ -60,6 +60,35 @@ public sealed class ZattooChannelMapperTests
     }
 
     [Fact]
+    public void Map_DoesNotAdvertiseHdFromDrmQualityWhenFallbackIsSd()
+    {
+        var channel = new ZattooChannel
+        {
+            Id = "mixed",
+            Name = "Mixed fixture",
+            Qualities = new[]
+            {
+                new ZattooQuality
+                {
+                    Height = 1080,
+                    IsAvailable = true,
+                    DrmRequired = true,
+                },
+                new ZattooQuality
+                {
+                    Height = 540,
+                    IsAvailable = true,
+                    DrmRequired = false,
+                },
+            },
+        };
+
+        var result = ZattooChannelMapper.Map(channel, "tuner-host_");
+
+        Assert.False(result.IsHD);
+    }
+
+    [Fact]
     public void Map_RejectsMissingEmbyChannelIdPrefix()
     {
         var channel = new ZattooChannel

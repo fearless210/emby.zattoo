@@ -25,6 +25,8 @@ namespace Emby.Zattoo.Zattoo
             DateTimeOffset endTime,
             CancellationToken cancellationToken = default);
 
+        void SetImportedGuideChannels(IReadOnlyCollection<string> channelIds);
+
         Task<IReadOnlyList<ZattooProgramDetails>> GetProgramDetailsAsync(
             IReadOnlyCollection<string> programIds,
             CancellationToken cancellationToken = default);

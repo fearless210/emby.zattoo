@@ -13,6 +13,7 @@ public sealed class ZattooRuntimeSettingsTests
             Username = " user@example.invalid ",
             Password = "encrypted-value-not-used-here",
             PreferredQuality = ZattooPreferredQuality.P720,
+            ChannelImportMode = ZattooChannelImportMode.ExcludeDrmOnly,
             EnableGuideDetails = false,
             FfmpegPath = " /opt/emby-server/bin/ffmpeg ",
             ProviderUrl = "https://zattoo.example/",
@@ -26,9 +27,12 @@ public sealed class ZattooRuntimeSettingsTests
         Assert.Equal("user@example.invalid", settings.ClientOptions.Username);
         Assert.Equal("decrypted-test-password", settings.ClientOptions.Password);
         Assert.Equal(new Uri("https://zattoo.example/"), settings.ClientOptions.ProviderBaseUri);
-        Assert.Equal("Emby.Zattoo.Plugin/1.0.0", settings.ClientOptions.UserAgent);
+        Assert.Equal("Emby.Zattoo.Plugin/1.1.0", settings.ClientOptions.UserAgent);
         Assert.False(settings.ClientOptions.EnableBackgroundGuideDetails);
         Assert.Equal(ZattooPreferredQuality.P720, settings.PreferredQuality);
+        Assert.Equal(
+            ZattooChannelImportMode.ExcludeDrmOnly,
+            settings.ChannelImportMode);
         Assert.Equal("/opt/emby-server/bin/ffmpeg", settings.FfmpegPath);
     }
 

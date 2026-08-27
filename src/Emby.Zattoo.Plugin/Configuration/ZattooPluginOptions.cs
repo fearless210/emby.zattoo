@@ -30,6 +30,13 @@ namespace Emby.Zattoo.Plugin.Configuration
         public ZattooPreferredQuality PreferredQuality { get; set; } =
             ZattooPreferredQuality.Auto;
 
+        [DisplayName("Channel import mode")]
+        [Description(
+            "Playable channels only imports channels with at least one available "
+            + "non-DRM quality and limits guide processing to those channels.")]
+        public ZattooChannelImportMode ChannelImportMode { get; set; } =
+            ZattooChannelImportMode.PlayableOnly;
+
         [DisplayName("Enrich guide descriptions")]
         [Description(
             "Loads detailed descriptions and genres progressively in the background. "
@@ -81,6 +88,13 @@ namespace Emby.Zattoo.Plugin.Configuration
                 context.AddValidationError(
                     nameof(PreferredQuality),
                     "Select Auto, 1080p, 720p or 540p.");
+            }
+
+            if (!Enum.IsDefined(typeof(ZattooChannelImportMode), ChannelImportMode))
+            {
+                context.AddValidationError(
+                    nameof(ChannelImportMode),
+                    "Select playable only, exclude DRM-only or all channels.");
             }
         }
     }

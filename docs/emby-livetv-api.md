@@ -121,8 +121,7 @@ remux démarré, ce chemin est remplacé par le point d'accès local Emby
 
 Le MVP annonce `mpegts`, désactive Direct Play, autorise Direct Stream et
 Transcoding, et exige `Open`/`Close`. Cette combinaison est validée pour la
-lecture de RTS 1 HD dans Emby Web. Le client Tizen et les changements répétés
-restent à tester.
+lecture de RTS 1 HD dans Emby Web. Les changements répétés restent à tester.
 
 ## Cycle de vie d'un stream
 
@@ -212,6 +211,5 @@ avec l'import en cours ; cette voie n'est pas retenue comme comportement normal.
 - comportement réel de fermeture de stream lors d'un arrêt ou changement de
   chaîne côté client ;
 - stabilité lors d'une lecture longue et de changements répétés ;
-- comportement du client Samsung Tizen ;
 - profondeur EPG réellement publiée pour chaque chaîne et comportement des
   programmations d'enregistrement Emby.

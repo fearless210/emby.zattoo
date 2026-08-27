@@ -58,6 +58,7 @@ namespace Emby.Zattoo.Plugin
                 Username = options.Username,
                 Password = passwordStore.GetDisplayValue(options.Password),
                 PreferredQuality = options.PreferredQuality,
+                ChannelImportMode = options.ChannelImportMode,
                 EnableGuideDetails = options.EnableGuideDetails,
                 FfmpegPath = options.FfmpegPath,
                 ProviderUrl = options.ProviderUrl,

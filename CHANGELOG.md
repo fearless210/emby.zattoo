@@ -4,6 +4,32 @@ Ce fichier recense les changements notables des versions publiées. Les commits
 et les tags Git constituent l'historique de référence ; aucune date n'est
 dupliquée ici.
 
+## 1.1.0 — Chaînes lisibles et capacités du compte
+
+### Ajouté
+
+- mode d'import **Playable channels only**, recommandé par défaut, conservant
+  les chaînes mixtes dès qu'au moins une qualité disponible est non-DRM ;
+- modes optionnels excluant seulement les chaînes DRM-only ou affichant le
+  catalogue complet à des fins de diagnostic ;
+- détection des capacités techniques du compte et du catalogue sans dépendre
+  du nom commercial de l'abonnement : replay, limite d'enregistrements cloud,
+  meilleure résolution non-DRM et capacité de flux simultanés ;
+- ajustement du `TunerCount` Emby et verrou interne à la capacité détectée afin
+  d'autoriser une lecture pendant un enregistrement lorsque le compte le permet.
+
+### Optimisé
+
+- parsing, cache et enrichissement EPG limités aux chaînes effectivement
+  importées, y compris lorsque **Import favorites only** est actif ;
+- exclusion des qualités DRM dans l'indicateur HD et maintien du repli vers la
+  meilleure qualité non-DRM d'une chaîne mixte.
+
+### Tests
+
+- couverture des trois modes d'import, des chaînes mixtes, du filtrage EPG,
+  des capacités de session et de la libération des emplacements de flux.
+
 ## 1.0.0 — Première version fonctionnelle
 
 ### Ajouté

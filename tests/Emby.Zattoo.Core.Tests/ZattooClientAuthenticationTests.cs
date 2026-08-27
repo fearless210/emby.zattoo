@@ -21,6 +21,10 @@ public sealed class ZattooClientAuthenticationTests
         Assert.NotNull(client.SessionCreatedAt);
         Assert.Equal("CH", client.SessionInfo?.CountryCode);
         Assert.Equal("CH", client.SessionInfo?.ServiceCountry);
+        Assert.True(client.SessionInfo?.ReplayAvailable);
+        Assert.Equal(0, client.SessionInfo?.RecordingNumberLimit);
+        Assert.Equal(1, client.SessionInfo?.MaximumConcurrentStreams);
+        Assert.True(client.SessionInfo?.ConcurrentStreamLimitIsInferred);
         Assert.Equal("fixture-guide-hash", client.SessionInfo?.PowerGuideHash);
         Assert.Equal(1, transport.ResetCount);
         Assert.Equal(0, transport.PendingRequestCount);
@@ -46,6 +50,51 @@ public sealed class ZattooClientAuthenticationTests
             transport.RecordedRequests,
             request => request.RelativePath.EndsWith("/account/login", StringComparison.Ordinal));
         Assert.Equal(0, transport.PendingRequestCount);
+    }
+
+    [Fact]
+    public async Task LoginAsync_InfersConcurrentStreamsFromNumericalCapabilities()
+    {
+        var transport = new FakeZattooTransport();
+        transport.Enqueue(HttpMethod.Get, "/token.json", HttpStatusCode.OK, Fixture.Read("token.json"));
+        transport.Enqueue(HttpMethod.Post, "/zapi/v3/session/hello", HttpStatusCode.OK, Fixture.Read("hello.json"));
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/v3/session",
+            HttpStatusCode.OK,
+            "{\"active\":true,\"current_country\":\"CH\","
+                + "\"account\":{\"service_country\":\"CH\"},"
+                + "\"nonlive\":{\"recording_number_limit\":2000},"
+                + "\"power_guide_hash\":\"fixture-guide-hash\"}");
+
+        using var client = CreateClient(transport);
+        await client.LoginAsync();
+
+        Assert.Equal(2000, client.SessionInfo?.RecordingNumberLimit);
+        Assert.Equal(4, client.SessionInfo?.MaximumConcurrentStreams);
+        Assert.True(client.SessionInfo?.ConcurrentStreamLimitIsInferred);
+    }
+
+    [Fact]
+    public async Task LoginAsync_PrefersProviderReportedConcurrentStreamLimit()
+    {
+        var transport = new FakeZattooTransport();
+        transport.Enqueue(HttpMethod.Get, "/token.json", HttpStatusCode.OK, Fixture.Read("token.json"));
+        transport.Enqueue(HttpMethod.Post, "/zapi/v3/session/hello", HttpStatusCode.OK, Fixture.Read("hello.json"));
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/v3/session",
+            HttpStatusCode.OK,
+            "{\"active\":true,\"current_country\":\"CH\","
+                + "\"account\":{\"service_country\":\"CH\",\"max_concurrent_streams\":2},"
+                + "\"nonlive\":{\"recording_number_limit\":2000},"
+                + "\"power_guide_hash\":\"fixture-guide-hash\"}");
+
+        using var client = CreateClient(transport);
+        await client.LoginAsync();
+
+        Assert.Equal(2, client.SessionInfo?.MaximumConcurrentStreams);
+        Assert.False(client.SessionInfo?.ConcurrentStreamLimitIsInferred);
     }
 
     [Fact]

@@ -169,6 +169,29 @@ public sealed class ZattooClientGuideTests
     }
 
     [Fact]
+    public async Task GetProgramsAsync_ParsesOnlyImportedGuideChannels()
+    {
+        var transport = new FakeZattooTransport();
+        ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
+        QueueGuide(transport);
+
+        using var client = ZattooClientAuthenticationTests.CreateClient(transport);
+        client.SetImportedGuideChannels(new[] { "tsr1" });
+        var start = DateTimeOffset.FromUnixTimeSeconds(1800000300);
+        var end = DateTimeOffset.FromUnixTimeSeconds(1800011100);
+
+        var imported = await client.GetProgramsAsync(new[] { "tsr1" }, start, end);
+        var excluded = await client.GetProgramsAsync(new[] { "tsr2" }, start, end);
+
+        Assert.Equal(2, imported.Count);
+        Assert.Empty(excluded);
+        Assert.Equal(
+            1,
+            transport.RecordedRequests.Count(request => request.RelativePath == GuidePath));
+        Assert.Equal(0, transport.PendingRequestCount);
+    }
+
+    [Fact]
     public async Task GetProgramsAsync_CoalescesConcurrentWindowLoads()
     {
         var transport = new FakeZattooTransport();

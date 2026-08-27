@@ -216,6 +216,7 @@ namespace Emby.Zattoo.Zattoo
 
                     var pending = new PendingProgram(
                         program.Id,
+                        program.ChannelId,
                         fingerprint,
                         priority,
                         program.StartDate,
@@ -269,6 +270,29 @@ namespace Emby.Zattoo.Zattoo
             }
 
             Report(progress);
+        }
+
+        public void RestrictToChannels(IReadOnlyCollection<string> channelIds)
+        {
+            if (channelIds == null)
+            {
+                throw new ArgumentNullException(nameof(channelIds));
+            }
+
+            var allowed = new HashSet<string>(channelIds, StringComparer.Ordinal);
+            lock (syncRoot)
+            {
+                var excluded = pendingPrograms
+                    .Where(program => !allowed.Contains(program.ChannelId))
+                    .ToArray();
+                foreach (var program in excluded)
+                {
+                    pendingPrograms.Remove(program);
+                    pendingById.Remove(program.Id);
+                }
+
+                removedPrograms += excluded.Length;
+            }
         }
 
         public void PrioritizePrograms(IEnumerable<ZattooProgram> programs)
@@ -899,12 +923,14 @@ namespace Emby.Zattoo.Zattoo
         {
             public PendingProgram(
                 string id,
+                string channelId,
                 string fingerprint,
                 int priority,
                 DateTimeOffset startDate,
                 DateTimeOffset expiresAt)
             {
                 Id = id;
+                ChannelId = channelId;
                 Fingerprint = fingerprint;
                 Priority = priority;
                 StartDate = startDate;
@@ -912,6 +938,8 @@ namespace Emby.Zattoo.Zattoo
             }
 
             public string Id { get; }
+
+            public string ChannelId { get; }
 
             public string Fingerprint { get; }
 
@@ -925,6 +953,7 @@ namespace Emby.Zattoo.Zattoo
             {
                 return new PendingProgram(
                     Id,
+                    ChannelId,
                     Fingerprint,
                     Math.Min(Priority, other.Priority),
                     StartDate <= other.StartDate ? StartDate : other.StartDate,

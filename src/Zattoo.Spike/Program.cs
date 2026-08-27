@@ -138,6 +138,24 @@ static async Task<int> PrintSurveyAsync(
     Console.WriteLine($"Non-DRM              : {statistics.ChannelsWithNonDrmStreams}");
     Console.WriteLine($"DRM uniquement       : {statistics.DrmOnlyChannels}");
     Console.WriteLine($"Sans stream disponible: {statistics.ChannelsWithoutAvailableStreams}");
+    var session = client.SessionInfo;
+    if (session != null)
+    {
+        Console.WriteLine(
+            $"Qualité non-DRM max. : "
+            + (session.MaximumPlayableHeight.HasValue
+                ? session.MaximumPlayableHeight.Value + "p"
+                : "inconnue"));
+        Console.WriteLine(
+            $"Flux simultanés      : {session.MaximumConcurrentStreams} "
+            + (session.ConcurrentStreamLimitIsInferred
+                ? "(inféré)"
+                : "(fourni par le service)"));
+        Console.WriteLine(
+            $"Replay Zattoo        : {(session.ReplayAvailable ? "oui" : "non")}");
+        Console.WriteLine(
+            $"Enregistrements cloud: {session.RecordingNumberLimit}");
+    }
     Console.WriteLine();
     Console.WriteLine("GO / NO-GO remains pending until a non-DRM stream passes probe and ffmpeg-test.");
     return 0;
