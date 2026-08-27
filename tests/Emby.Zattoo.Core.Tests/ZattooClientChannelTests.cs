@@ -45,6 +45,88 @@ public sealed class ZattooClientChannelTests
         Assert.Equal(0, client.SessionInfo?.DrmOnlyChannelCount);
         Assert.Equal(0, client.SessionInfo?.UnavailableChannelCount);
         Assert.Equal(720, client.SessionInfo?.MaximumPlayableHeight);
+        Assert.True(client.SessionInfo?.FavoritesAvailable);
+        Assert.Equal(0, transport.PendingRequestCount);
+    }
+
+    [Fact]
+    public async Task GetChannelsAsync_LoadsCatalogueWhenFavoritesRequestFails()
+    {
+        var transport = new FakeZattooTransport();
+        ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/channels/favorites",
+            HttpStatusCode.InternalServerError,
+            string.Empty);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/v3/cached/fixture-guide-hash/channels",
+            HttpStatusCode.OK,
+            Fixture.Read("channels.json"));
+
+        using var client = ZattooClientAuthenticationTests.CreateClient(transport);
+        var channels = await client.GetChannelsAsync();
+
+        Assert.Equal(2, channels.Count);
+        Assert.All(channels, channel => Assert.False(channel.IsFavorite));
+        Assert.False(client.SessionInfo?.FavoritesAvailable);
+        Assert.Equal(0, transport.PendingRequestCount);
+    }
+
+    [Fact]
+    public async Task GetChannelsAsync_LoadsCatalogueWhenFavoritesAreMalformed()
+    {
+        var transport = new FakeZattooTransport();
+        ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/channels/favorites",
+            HttpStatusCode.OK,
+            "{\"success\":false}");
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/v3/cached/fixture-guide-hash/channels",
+            HttpStatusCode.OK,
+            Fixture.Read("channels.json"));
+
+        using var client = ZattooClientAuthenticationTests.CreateClient(transport);
+        var channels = await client.GetChannelsAsync();
+
+        Assert.Equal(2, channels.Count);
+        Assert.False(client.SessionInfo?.FavoritesAvailable);
+        Assert.Equal(0, transport.PendingRequestCount);
+    }
+
+    [Fact]
+    public async Task GetChannelsAsync_RenewsSessionWhenFavoritesStayUnauthorized()
+    {
+        var transport = new FakeZattooTransport();
+        ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/channels/favorites",
+            HttpStatusCode.Unauthorized,
+            string.Empty);
+        ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/channels/favorites",
+            HttpStatusCode.Unauthorized,
+            string.Empty);
+        ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/v3/cached/fixture-guide-hash/channels",
+            HttpStatusCode.OK,
+            Fixture.Read("channels.json"));
+
+        using var client = ZattooClientAuthenticationTests.CreateClient(transport);
+        var channels = await client.GetChannelsAsync();
+
+        Assert.Equal(2, channels.Count);
+        Assert.False(client.SessionInfo?.FavoritesAvailable);
+        Assert.True(client.IsAuthenticated);
         Assert.Equal(0, transport.PendingRequestCount);
     }
 
@@ -96,9 +178,22 @@ public sealed class ZattooClientChannelTests
     {
         var transport = new FakeZattooTransport();
         ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
-        transport.Enqueue(HttpMethod.Get, "/zapi/channels/favorites", HttpStatusCode.Forbidden, string.Empty);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/channels/favorites",
+            HttpStatusCode.OK,
+            Fixture.Read("favorites.json"));
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/v3/cached/fixture-guide-hash/channels",
+            HttpStatusCode.Forbidden,
+            string.Empty);
         ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
-        transport.Enqueue(HttpMethod.Get, "/zapi/channels/favorites", HttpStatusCode.Forbidden, string.Empty);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/v3/cached/fixture-guide-hash/channels",
+            HttpStatusCode.Forbidden,
+            string.Empty);
 
         using var client = ZattooClientAuthenticationTests.CreateClient(transport);
 

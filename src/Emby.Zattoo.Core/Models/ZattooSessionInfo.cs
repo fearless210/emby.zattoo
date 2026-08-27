@@ -21,6 +21,12 @@ namespace Emby.Zattoo.Models
 
         public bool ConcurrentStreamLimitIsInferred { get; set; } = true;
 
+        /// <summary>
+        /// Gets or sets a value indicating whether the provider delivered the
+        /// favorite channel list during the last catalogue load.
+        /// </summary>
+        public bool FavoritesAvailable { get; set; } = true;
+
         public int PlayableChannelCount { get; set; }
 
         public int DrmOnlyChannelCount { get; set; }

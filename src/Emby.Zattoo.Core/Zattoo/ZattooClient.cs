@@ -120,18 +120,23 @@ namespace Emby.Zattoo.Zattoo
             ThrowIfDisposed();
             await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
 
-            var favoritesResponse = await SendAuthenticatedWithRetryAsync(
-                token => transport.GetAsync(FavoritesPath, token),
-                "loading channel favorites",
-                cancellationToken).ConfigureAwait(false);
-            var favorites = ParseFavorites(favoritesResponse.Content);
+            var favorites = await LoadFavoritesAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (favorites == null)
+            {
+                // A failed favorites request may also have invalidated the
+                // session before the catalogue could be requested.
+                await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
+            }
 
             var channelsResponse = await SendAuthenticatedWithRetryAsync(
                 token => transport.GetAsync(BuildChannelsPath(), token),
                 "loading channels",
                 cancellationToken).ConfigureAwait(false);
 
-            var channels = ParseChannels(channelsResponse.Content, favorites);
+            var channels = ParseChannels(
+                channelsResponse.Content,
+                favorites ?? new HashSet<string>(StringComparer.Ordinal));
             var statistics = ZattooStreamStatistics.Calculate(channels);
             var maximumPlayableHeight = channels
                 .SelectMany(channel => channel.Qualities)
@@ -150,6 +155,7 @@ namespace Emby.Zattoo.Zattoo
 
                 if (sessionInfo != null)
                 {
+                    sessionInfo.FavoritesAvailable = favorites != null;
                     sessionInfo.PlayableChannelCount =
                         statistics.ChannelsWithNonDrmStreams;
                     sessionInfo.DrmOnlyChannelCount = statistics.DrmOnlyChannels;
@@ -1013,6 +1019,34 @@ namespace Emby.Zattoo.Zattoo
             return result;
         }
 
+        /// <summary>
+        /// Loads the favorite channel IDs, or returns null when the provider does
+        /// not deliver them. Favorites decorate the catalogue and must never
+        /// prevent it from loading.
+        /// </summary>
+        private async Task<HashSet<string>?> LoadFavoritesAsync(
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var response = await SendAuthenticatedWithRetryAsync(
+                    token => transport.GetAsync(FavoritesPath, token),
+                    "loading channel favorites",
+                    cancellationToken).ConfigureAwait(false);
+                return ParseFavorites(response.Content);
+            }
+            catch (ZattooAuthenticationException)
+            {
+                // Bad credentials must surface instead of triggering a second
+                // login attempt from the catalogue request.
+                throw;
+            }
+            catch (ZattooException)
+            {
+                return null;
+            }
+        }
+
         private static HashSet<string> ParseFavorites(string content)
         {
             var root = ParseObject(content, "favorites response");
@@ -1442,6 +1476,7 @@ namespace Emby.Zattoo.Zattoo
                 MaximumConcurrentStreams = source.MaximumConcurrentStreams,
                 ConcurrentStreamLimitIsInferred =
                     source.ConcurrentStreamLimitIsInferred,
+                FavoritesAvailable = source.FavoritesAvailable,
                 PlayableChannelCount = source.PlayableChannelCount,
                 DrmOnlyChannelCount = source.DrmOnlyChannelCount,
                 UnavailableChannelCount = source.UnavailableChannelCount,

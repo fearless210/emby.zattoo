@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Emby.Zattoo.Exceptions;
 using Emby.Zattoo.Models;
 using Emby.Zattoo.Zattoo;
 using MediaBrowser.Controller;
@@ -84,6 +85,22 @@ namespace Emby.Zattoo.Plugin.LiveTv
             var context = RequireClient();
             var channels = await context.Client.GetChannelsAsync(cancellationToken)
                 .ConfigureAwait(false);
+            var session = context.Client.SessionInfo;
+            if (tuner.ImportFavoritesOnly && session?.FavoritesAvailable == false)
+            {
+                // Importing an empty list would drop every channel Emby already
+                // knows. Fail the refresh instead and keep the existing lineup.
+                throw new ZattooApiException(
+                    "Zattoo did not return the channel favorites. The channel list "
+                    + "was kept unchanged because this tuner imports favorites only.");
+            }
+
+            if (session?.FavoritesAvailable == false)
+            {
+                Logger.Warn(
+                    "Zattoo did not return the channel favorites; every channel is imported as non-favorite.");
+            }
+
             var importable = ZattooChannelFilter.Apply(
                 channels,
                 context.Settings.ChannelImportMode);
@@ -93,7 +110,6 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 .ToArray();
             context.Client.SetImportedGuideChannels(
                 selected.Select(channel => channel.Id).ToArray());
-            var session = context.Client.SessionInfo;
             var concurrentStreams = Math.Max(
                 1,
                 session?.MaximumConcurrentStreams ?? 1);
