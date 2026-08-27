@@ -8,6 +8,13 @@ dupliquée ici.
 
 ### Corrigé
 
+- lecture refusée par les clients annonçant un plafond de débit très élevé, avec
+  le message *media not supported* : faute de débit source
+  déclaré, Emby calait le transcodage sur ce plafond et l'encodeur dépassait le
+  niveau H.264 accepté par l'appareil ; le plugin publie désormais le débit, la
+  résolution et les codecs réels de la variante retenue ;
+- désentrelacement systématique appliqué par Emby à un flux progressif, faute de
+  caractéristiques de piste déclarées ;
 - échec de lecture `HTTP 500` sur le point d'accès Live Stream lorsqu'Emby se
   rattachait au flux, notamment quand la détection des pistes précède un
   transcodage : les consommateurs sont désormais servis l'un après l'autre sur
@@ -40,6 +47,8 @@ dupliquée ici.
 
 ### Tests
 
+- lecture des caractéristiques d'une variante HLS, correspondance des codecs
+  RFC 6381 et repli sur la qualité du catalogue sans playlist maître ;
 - prise de relais entre consommateurs successifs, refus d'un consommateur
   concurrent après l'attente, et respect de l'annulation ;
 - repli de qualité lorsqu'aucun niveau ne tient sous le plafond, et priorité

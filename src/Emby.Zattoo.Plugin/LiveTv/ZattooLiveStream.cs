@@ -182,6 +182,10 @@ namespace Emby.Zattoo.Plugin.LiveTv
                     stderrMonitor = startedStderrMonitor;
                     capacityLease = acquiredLease;
                     DateOpened = DateTimeOffset.UtcNow;
+                    ZattooMediaSourceFactory.DescribeStreams(
+                        MediaSource,
+                        selection,
+                        stream);
                     ZattooMediaSourceFactory.UseLocalLiveStreamEndpoint(
                         MediaSource,
                         localApiUrl,

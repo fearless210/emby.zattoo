@@ -59,4 +59,51 @@ public sealed class HlsPlaylistSelectorTests
         Assert.Throws<ZattooProtocolException>(
             () => HlsPlaylistSelector.Select(master, MasterUri, 720));
     }
+
+    [Fact]
+    public void Select_ReportsTheCharacteristicsOfTheSelectedRendition()
+    {
+        var selection = HlsPlaylistSelector.Select(
+            Fixture.Read("hls-master.m3u8"),
+            new Uri("https://cdn.example.invalid/live/master.m3u8"));
+
+        Assert.Equal(1280, selection.Width);
+        Assert.Equal(720, selection.Height);
+        Assert.Equal(5400000, selection.Bandwidth);
+        Assert.Equal("h264", selection.VideoCodec);
+        Assert.Equal("aac", selection.AudioCodec);
+    }
+
+    [Fact]
+    public void Select_ReportsTheCharacteristicsOfACappedRendition()
+    {
+        var selection = HlsPlaylistSelector.Select(
+            Fixture.Read("hls-master.m3u8"),
+            new Uri("https://cdn.example.invalid/live/master.m3u8"),
+            maximumHeight: 432);
+
+        Assert.Equal(768, selection.Width);
+        Assert.Equal(432, selection.Height);
+        Assert.Equal(3200000, selection.Bandwidth);
+    }
+
+    [Theory]
+    [InlineData("avc1.64001f,mp4a.40.2", "h264")]
+    [InlineData("hvc1.2.4.L120.B0", "hevc")]
+    [InlineData("mp4a.40.2", null)]
+    [InlineData("", null)]
+    public void ReadVideoCodec_MapsKnownIdentifiersOnly(string codecs, string? expected)
+    {
+        Assert.Equal(expected, HlsPlaylistSelector.ReadVideoCodec(codecs));
+    }
+
+    [Theory]
+    [InlineData("avc1.64001f,mp4a.40.2", "aac")]
+    [InlineData("avc1.64001f,ac-3", "ac3")]
+    [InlineData("avc1.64001f,ec-3", "eac3")]
+    [InlineData("avc1.64001f", null)]
+    public void ReadAudioCodec_MapsKnownIdentifiersOnly(string codecs, string? expected)
+    {
+        Assert.Equal(expected, HlsPlaylistSelector.ReadAudioCodec(codecs));
+    }
 }

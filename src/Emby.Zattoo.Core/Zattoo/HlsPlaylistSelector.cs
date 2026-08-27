@@ -105,7 +105,14 @@ namespace Emby.Zattoo.Zattoo
             return new HlsPlaylistSelection(
                 selectedVariant.Uri,
                 audio?.Uri,
-                isMasterPlaylist: true);
+                isMasterPlaylist: true)
+            {
+                Width = selectedVariant.Width,
+                Height = selectedVariant.Height,
+                Bandwidth = selectedVariant.Bandwidth,
+                VideoCodec = ReadVideoCodec(selectedVariant.Codecs),
+                AudioCodec = ReadAudioCodec(selectedVariant.Codecs),
+            };
         }
 
         private static HlsVariant SelectVariant(
@@ -134,6 +141,7 @@ namespace Emby.Zattoo.Zattoo
             Uri playlistUri,
             string relativeUri)
         {
+            int? width = null;
             int? height = null;
             var resolution = ReadAttribute(attributes, "RESOLUTION");
             var separator = resolution.IndexOfAny(new[] { 'x', 'X' });
@@ -145,6 +153,16 @@ namespace Emby.Zattoo.Zattoo
                     out var parsedHeight))
             {
                 height = parsedHeight;
+            }
+
+            if (separator > 0
+                && int.TryParse(
+                    resolution.Substring(0, separator),
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var parsedWidth))
+            {
+                width = parsedWidth;
             }
 
             int? bandwidth = null;
@@ -160,10 +178,84 @@ namespace Emby.Zattoo.Zattoo
             return new HlsVariant
             {
                 Uri = ResolveSecureUri(playlistUri, relativeUri),
+                Width = width,
                 Height = height,
                 Bandwidth = bandwidth,
+                Codecs = ReadAttribute(attributes, "CODECS"),
                 AudioGroupId = ReadAttribute(attributes, "AUDIO"),
             };
+        }
+
+        /// <summary>
+        /// Maps the RFC 6381 identifiers of a CODECS attribute to the names Emby
+        /// uses. Unknown identifiers return null: the plugin must not claim a
+        /// codec it did not recognise.
+        /// </summary>
+        internal static string? ReadVideoCodec(string codecs)
+        {
+            foreach (var codec in SplitCodecs(codecs))
+            {
+                if (codec.StartsWith("avc1", StringComparison.OrdinalIgnoreCase)
+                    || codec.StartsWith("avc3", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "h264";
+                }
+
+                if (codec.StartsWith("hvc1", StringComparison.OrdinalIgnoreCase)
+                    || codec.StartsWith("hev1", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "hevc";
+                }
+            }
+
+            return null;
+        }
+
+        internal static string? ReadAudioCodec(string codecs)
+        {
+            foreach (var codec in SplitCodecs(codecs))
+            {
+                if (codec.StartsWith("mp4a.40", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "aac";
+                }
+
+                if (codec.StartsWith("ac-3", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "ac3";
+                }
+
+                if (codec.StartsWith("ec-3", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "eac3";
+                }
+
+                if (codec.StartsWith("mp3", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(codec, "mp4a.69", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(codec, "mp4a.6B", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "mp3";
+                }
+            }
+
+            return null;
+        }
+
+        private static IEnumerable<string> SplitCodecs(string codecs)
+        {
+            if (string.IsNullOrWhiteSpace(codecs))
+            {
+                yield break;
+            }
+
+            foreach (var codec in codecs.Split(','))
+            {
+                var normalized = codec.Trim();
+                if (normalized.Length > 0)
+                {
+                    yield return normalized;
+                }
+            }
         }
 
         private static Dictionary<string, string> ParseAttributes(string value)
@@ -255,9 +347,13 @@ namespace Emby.Zattoo.Zattoo
         {
             public Uri Uri { get; set; } = null!;
 
+            public int? Width { get; set; }
+
             public int? Height { get; set; }
 
             public int? Bandwidth { get; set; }
+
+            public string Codecs { get; set; } = string.Empty;
 
             public string AudioGroupId { get; set; } = string.Empty;
         }
@@ -288,5 +384,20 @@ namespace Emby.Zattoo.Zattoo
         public Uri? AudioUri { get; }
 
         public bool IsMasterPlaylist { get; }
+
+        /// <summary>Gets the width advertised for the selected rendition.</summary>
+        public int? Width { get; set; }
+
+        /// <summary>Gets the height advertised for the selected rendition.</summary>
+        public int? Height { get; set; }
+
+        /// <summary>Gets the peak bandwidth in bits per second, when advertised.</summary>
+        public int? Bandwidth { get; set; }
+
+        /// <summary>Gets the video codec name, or null when it was not advertised.</summary>
+        public string? VideoCodec { get; set; }
+
+        /// <summary>Gets the audio codec name, or null when it was not advertised.</summary>
+        public string? AudioCodec { get; set; }
     }
 }

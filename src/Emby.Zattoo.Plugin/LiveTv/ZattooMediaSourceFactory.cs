@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
+using Emby.Zattoo.Models;
+using Emby.Zattoo.Zattoo;
 using MediaBrowser.Model.Dto;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.MediaInfo;
 
 namespace Emby.Zattoo.Plugin.LiveTv
@@ -33,6 +37,67 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 SupportsTranscoding = true,
                 Timestamp = TransportStreamTimestamp.Valid,
             };
+        }
+
+        /// <summary>
+        /// Declares what the remux will actually contain. Without this, Emby has no
+        /// source bitrate to constrain a transcode with and falls back to the ceiling
+        /// advertised by the client, which can push an encoder past the H.264 level
+        /// the device supports. It also stops Emby from assuming broadcast interlacing.
+        /// </summary>
+        internal static void DescribeStreams(
+            MediaSourceInfo source,
+            HlsPlaylistSelection selection,
+            ZattooStream stream)
+        {
+            if (source == null)
+            {
+                throw new ArgumentNullException(nameof(source));
+            }
+
+            if (selection == null)
+            {
+                throw new ArgumentNullException(nameof(selection));
+            }
+
+            if (stream == null)
+            {
+                throw new ArgumentNullException(nameof(stream));
+            }
+
+            var bitrate = selection.Bandwidth
+                ?? (stream.BitrateKbps.HasValue
+                    ? stream.BitrateKbps.Value * 1000
+                    : (int?)null);
+            var streams = new List<MediaStream>
+            {
+                new MediaStream
+                {
+                    Type = MediaStreamType.Video,
+                    Index = 0,
+                    Codec = selection.VideoCodec ?? "h264",
+                    Width = selection.Width ?? stream.Width,
+                    Height = selection.Height ?? stream.Height,
+                    BitRate = bitrate,
+
+                    // The remux copies the provider rendition, which is progressive.
+                    IsInterlaced = false,
+                    IsDefault = true,
+                },
+                new MediaStream
+                {
+                    Type = MediaStreamType.Audio,
+                    Index = 1,
+                    Codec = selection.AudioCodec ?? "aac",
+                    IsDefault = true,
+                },
+            };
+
+            source.MediaStreams = streams;
+            if (bitrate > 0)
+            {
+                source.Bitrate = bitrate;
+            }
         }
 
         /// <summary>
