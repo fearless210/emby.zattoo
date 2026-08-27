@@ -4,6 +4,84 @@ Ce fichier recense les changements notables des versions publiées. Les commits
 et les tags Git constituent l'historique de référence ; aucune date n'est
 dupliquée ici.
 
+## 1.0.0 — Première version fonctionnelle
+
+### Ajouté
+
+- intégration de l'EPG Zattoo à la tâche native **Actualiser le guide** d'Emby ;
+- prise en charge des plages de guide allant jusqu'aux 14 jours acceptés par
+  Emby, découpées en fenêtres de cinq heures ;
+- cache partagé de 30 minutes évitant de télécharger une même fenêtre pour
+  chaque chaîne, avec mutualisation des demandes concurrentes ;
+- mapping des titres, épisodes, horaires UTC, genres, images et métadonnées
+  détaillées présentes dans la réponse du guide vers `ProgramInfo` ;
+- commande `epg-survey` pour mesurer sans afficher de secret la profondeur de
+  guide réellement publiée par Zattoo ;
+- commande `epg-endpoint-survey` comparant les endpoints de guide v2 et v3 sur
+  une même fenêtre à partir de compteurs anonymes, sans afficher de contenu ;
+- commande `epg-details-survey` utilisant jusqu'à cinq lots et client borné à
+  20 identifiants par appel pour mesurer la couverture et le coût des
+  descriptions sans afficher leur contenu, avec une seconde entre les lots et
+  un unique retry de transport après deux secondes ;
+- enrichissement facultatif des descriptions et genres EPG en arrière-plan,
+  sans attente supplémentaire dans la tâche native Emby ;
+- file incrémentale par lots de 20, espacés d'une seconde, donnant la priorité
+  aux programmes courants et suivants, aux chaînes favorites, aux prochaines
+  24 heures, sans enrichir par avance les programmes non favoris plus éloignés ;
+- fenêtre glissante limitant le temps initial, le nombre d'appels et la taille
+  du cache, tout en conservant le guide de base complet jusqu'à 14 jours ;
+- priorité immédiate au programme courant et au suivant lorsqu'une chaîne est
+  ouverte, sans ajouter d'attente au démarrage du stream ;
+- cache persistant des réponses positives et incomplètes, restauré après un
+  redémarrage et isolé par un hash du compte, du fournisseur et de la langue ;
+- empreinte stable de chaque programme permettant d'ignorer les données
+  inchangées et de ne charger que les programmes nouveaux ou modifiés ;
+- nouvelle tentative différée pour les réponses encore sans description,
+  déduplication des requêtes en vol et purge six heures après la fin du
+  programme ;
+- journal JSON ajouté par lots et compacté périodiquement, sans dépendance
+  native supplémentaire afin de conserver le déploiement avec une seule DLL ;
+- alimentation de la file une seule fois lors du chargement initial de chaque
+  fenêtre, sans reparcourir les programmes de toutes les chaînes à chaque appel
+  d'Emby ;
+- option native **Enrich guide descriptions** et logs de progression limités à
+  des compteurs anonymes.
+
+### Tests
+
+- tests des deux formes de réponse de guide observées, du filtrage temporel,
+  du renouvellement de session, du cache, de la concurrence et d'une plage
+  complète de 14 jours ;
+- tests du mapping vers le contrat EPG d'Emby et de la stabilité de `ShowId` ;
+- tests du parsing, de la déduplication, de la limite de lot et du renouvellement
+  de session pour les détails de programmes ;
+- tests du traitement en arrière-plan, de la priorité, de l'enrichissement, du
+  cache incomplet, de la purge, de l'ajout incrémental et de l'arrêt propre ;
+- tests de restauration du cache après redémarrage, de non-rechargement d'un
+  programme inchangé, d'invalidation d'un programme modifié, d'isolation entre
+  comptes et de priorité déclenchée par l'ouverture d'une chaîne ;
+- test excluant de la file les programmes non favoris situés au-delà de la
+  fenêtre glissante de 24 heures ;
+- sondage réel sur 14 jours : 214 215 programmes futurs, 491 chaînes couvertes
+  sur 493 et 490 chaînes atteignant la cible à six heures près ;
+- chargement réel de 114 740 programmes sur 7 jours par le Core en 27,7 secondes,
+  puis imports complets par la tâche native Emby en 7 min 16 s et 6 min 04 s ;
+- planification persistante et exécution réelle d'un enregistrement, avec
+  création de la médiathèque, fichier lisible et fermeture propre du stream ;
+- premier sondage réel de 100 identifiants en un appel : 20 détails retournés,
+  dont 17 descriptions et 14 genres, confirmant la nécessité de lots plus
+  petits ;
+- second sondage réel en cinq lots espacés : 100 détails retournés sur 100 sans
+  retry en 4,1 s, dont 88 descriptions et 73 genres ;
+- comparaison réelle sur une fenêtre de cinq heures : les endpoints v2 et v3
+  ont retourné les mêmes 3 840 programmes et les mêmes métadonnées exploitables,
+  sans description directe ; l'endpoint v3 reste donc le chemin retenu ;
+- validation réelle de l'enrichissement dans Emby : descriptions visibles,
+  cache persistant restauré après redémarrage et seulement 213 détails traités
+  après limitation de la file, au lieu de plus de 99 000 ;
+- actualisation native finale du guide terminée en 8 min 18 s avec programmes et
+  descriptions disponibles dans l'interface Emby.
+
 ## 0.2.4
 
 ### Corrigé

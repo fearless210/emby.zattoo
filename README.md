@@ -6,10 +6,10 @@ flux Zattoo, sélectionne la vidéo et l'audio, puis les remuxe en MPEG-TS pour
 les clients Emby, sans réencodage.
 
 > **Projet non officiel et expérimental.** Il n'est affilié ni à Zattoo ni à
-> Emby. Le transport a été validé pendant cinq minutes. Le chargement, la
-> configuration, l'import des chaînes et la lecture d'une chaîne ont été
-> validés sur Emby Linux. Les changements répétés et la lecture longue restent
-> à tester.
+> Emby. Le chargement, la configuration, l'import des chaînes et la lecture
+> continue ont été validés sur Emby Linux. La profondeur EPG a été validée avec
+> un compte réel ; son import et le parcours d'enregistrement sont également
+> validés dans Emby.
 
 ## Pourquoi ce projet ?
 
@@ -43,15 +43,18 @@ déchiffre pas les chaînes protégées et ne contourne aucun DRM.
 | Lecture | URL HLS7 non-DRM obtenue à la demande, avec une variante vidéo et l'audio par défaut |
 | Qualité | Sélection `Auto`, `1080p`, `720p` ou `540p` |
 | Transport | Remux H.264/AAC vers MPEG-TS par FFmpeg avec `-c copy`, sans réencodage |
+| Guide TV | EPG Zattoo chargé par la tâche native Emby jusqu'à 14 jours, cache partagé et enrichissement persistant des descriptions |
 | Configuration | Page **Settings** native dans le tableau de bord Emby |
 | Sécurité | Mot de passe chiffré par Emby, secret masqué dans l'interface et données sensibles retirées des logs |
 
-L'EPG, le Replay, les enregistrements et les flux Widevine/DRM ne sont pas pris
-en charge dans cette version.
+Le Replay, les enregistrements hébergés par Zattoo et les flux Widevine/DRM ne
+sont pas pris en charge.
 
 ## État du projet
 
-La version actuelle est `0.2.4` et cible la branche stable Emby 4.9.
+La version `1.0.0` est la première version fonctionnelle du projet et cible la
+branche stable Emby 4.9. Elle réunit l'authentification, l'import des chaînes,
+la lecture Live, le guide enrichi et le parcours DVR validés sur serveur réel.
 
 | Validation | État |
 | --- | --- |
@@ -63,8 +66,13 @@ La version actuelle est `0.2.4` et cible la branche stable Emby 4.9.
 | Routage des chaînes vers le tuner Emby | Validé sur Emby 4.9.5.0 |
 | Exposition du remux via le point d'accès Live Stream interne | Validée sur Emby 4.9.5.0 |
 | Lecture Emby Web | Validée sur RTS 1 HD |
-| Arrêt, changements de chaîne et lecture longue | À tester |
-| Client Samsung Tizen et test longue durée | Étape ultérieure |
+| Arrêt et changements de chaîne | Validés sans processus FFmpeg résiduel |
+| Lecture continue | Validée pendant 15 minutes sans coupure perçue |
+| Profondeur EPG réelle jusqu'à 14 jours | Validée : 214 215 programmes futurs, 491 chaînes couvertes sur 493 |
+| Import EPG par la tâche native Emby | Validé sur 7 jours et 114 740 programmes ; premier import en 7 min 16 s, second en 6 min 04 s |
+| Détails EPG | Enrichissement persistant validé dans Emby ; descriptions visibles et seulement 213 détails chargés après reprise d'un cache existant |
+| Planification et exécution d'un enregistrement | Validées avec création de la médiathèque et fichier lisible |
+| Client Samsung Tizen | Validation différée |
 
 Les chiffres du catalogue dépendent de l'abonnement, de la région et du compte
 utilisés. Voir le [rapport de faisabilité](docs/feasibility.md) pour le détail
@@ -81,8 +89,8 @@ des essais.
 
 ### 1. Télécharger le plugin
 
-Télécharger `Emby.Zattoo-v0.2.4.zip` depuis la
-[release v0.2.4](https://github.com/fearless210/emby.zattoo/releases/tag/v0.2.4),
+Télécharger `Emby.Zattoo-v1.0.0.zip` depuis la
+[release v1.0.0](https://github.com/fearless210/emby.zattoo/releases/tag/v1.0.0),
 puis extraire `Emby.Zattoo.dll`. La DLL est également proposée séparément dans
 les assets de la release. Le fichier `SHA256SUMS.txt` permet d'en vérifier
 l'intégrité.
@@ -132,13 +140,16 @@ Ouvrir **Dashboard → Plugins → Zattoo Live TV → Settings**, puis renseigne
 | Zattoo username | Adresse e-mail ou nom du compte |
 | Zattoo password | Mot de passe du compte ; il sera chiffré côté serveur |
 | Preferred quality | `Auto`, `1080p`, `720p` ou `540p` |
+| Enrich guide descriptions | Recommandé ; charge progressivement les descriptions et genres manquants sans bloquer Emby |
 | FFmpeg executable | Chemin absolu Linux recommandé, par exemple `/usr/bin/ffmpeg` |
 | Provider URL | Conserver `https://zattoo.com/`, sauf compte d'un revendeur compatible |
 | Zattoo web application version | Conserver la valeur proposée, sauf diagnostic particulier |
 
 Enregistrer, puis ouvrir **Live TV → Tuner Devices → Add**, sélectionner
 **Zattoo** et actualiser les chaînes. L'option Emby **Import favorites only** est
-prise en charge. Le MVP limite le tuner à un flux simultané.
+prise en charge. La tâche Emby **Actualiser le guide** appelle directement le
+fournisseur EPG du tuner. Emby utilise sept jours par défaut et permet d'en
+configurer jusqu'à quatorze. Le MVP limite le tuner à un flux simultané.
 
 Le protocole de validation complet se trouve dans le
 [guide d'installation et de test Emby](docs/emby-mvp.md).
@@ -157,6 +168,46 @@ qu'une URL distante. À l'ouverture d'une chaîne, le plugin :
 
 Cette architecture évite d'envoyer les credentials, cookies ou URL Zattoo au
 navigateur et aux clients Emby.
+
+### Guide TV
+
+Le plugin implémente le fournisseur de guide du tuner Emby. Lors de la tâche
+**Actualiser le guide**, Emby demande les programmes chaîne par chaîne. Le Core
+charge les données JSON Zattoo en fenêtres de cinq heures et conserve chaque
+fenêtre pendant 30 minutes. Comme une réponse contient plusieurs chaînes, les
+appels suivants réutilisent les données déjà chargées au lieu de solliciter le
+fournisseur pour chaque chaîne.
+
+Les programmes sont filtrés sur la plage demandée, dédupliqués et transmis à
+Emby avec un `ShowId` Zattoo stable. Emby construit ensuite son propre
+identifiant, stocke le guide dans sa base et l'utilise pour la planification.
+La profondeur effective reste limitée aux données publiées par Zattoo pour le
+compte, la région et chaque chaîne.
+
+Lorsque **Enrich guide descriptions** est activé, les programmes dont le résumé
+ou les genres sont incomplets rejoignent une file d'arrière-plan. Le worker les
+traite par lots de 20 espacés d'une seconde. L'ordre donne la priorité aux
+programmes en cours et suivants, puis aux chaînes favorites et aux programmes
+des prochaines 24 heures. Les programmes non favoris plus éloignés restent
+disponibles dans le guide de base et ne sont enrichis que lorsqu'ils entrent
+dans cette fenêtre glissante. L'ouverture d'une chaîne replace aussi son
+programme courant et le suivant en tête de file, sans retarder la lecture.
+
+Les détails sont conservés dans un journal JSON local au dossier de données du
+plugin. Chaque programme reçoit une empreinte calculée à partir des données du
+guide : si elle n'a pas changé après une actualisation ou un redémarrage, aucun
+nouvel appel de détail n'est effectué. Seuls les programmes nouveaux ou modifiés
+sont ajoutés. Une réponse encore sans description est retentée de manière
+espacée, car Zattoo peut compléter ses métadonnées plus tard. Les entrées sont
+supprimées six heures après la fin du programme et le journal est compacté
+périodiquement.
+
+Ce traitement ne ralentit pas la tâche native **Actualiser le guide**. Le
+premier passage importe immédiatement le guide de base ; une actualisation Emby
+ultérieure applique les descriptions déjà chargées. Le fichier de cache ne
+contient ni identifiants de connexion ni URL signée, et sa portée de compte est
+un hash. Les logs indiquent seulement des compteurs de progression, sans titre,
+identifiant de programme ni corps de réponse.
 
 ## Développement
 
@@ -184,6 +235,8 @@ $env:ZATTOO_PASSWORD = "mot-de-passe"
 
 dotnet run --project .\src\Zattoo.Spike -- channels
 dotnet run --project .\src\Zattoo.Spike -- survey
+dotnet run --project .\src\Zattoo.Spike -- epg-survey 14
+dotnet run --project .\src\Zattoo.Spike -- epg-details-survey 100
 dotnet run --project .\src\Zattoo.Spike -- streams tsr1
 dotnet run --project .\src\Zattoo.Spike -- probe tsr1 auto hls
 dotnet run --project .\src\Zattoo.Spike -- ffmpeg-test tsr1 30 auto hls
@@ -259,6 +312,7 @@ d'intégration au catalogue Emby.
 ## Documentation
 
 - [Changelog](CHANGELOG.md)
+- [Notes de la version 1.0.0](docs/releases/v1.0.0.md)
 - [Installation et validation du MVP Emby](docs/emby-mvp.md)
 - [Rapport de faisabilité et décisions GO / NO-GO](docs/feasibility.md)
 - [Guide du Stream Spike](docs/stream-spike.md)

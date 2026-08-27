@@ -9,10 +9,35 @@ URLs signées.
 ```powershell
 dotnet run --project src/Zattoo.Spike --configuration Release -- channels
 dotnet run --project src/Zattoo.Spike --configuration Release -- survey
+dotnet run --project src/Zattoo.Spike --configuration Release -- epg-survey 14
+dotnet run --project src/Zattoo.Spike --configuration Release -- epg-endpoint-survey 5
+dotnet run --project src/Zattoo.Spike --configuration Release -- epg-details-survey 100
 ```
 
 `channels` affiche le numéro, le nom et le `cid` stable. `survey` calcule la
 répartition DRM depuis le catalogue et ne demande aucun stream Live.
+
+`epg-survey [1-14]` demande la profondeur EPG indiquée pour toutes les chaînes,
+en utilisant le même découpage et le même cache que le plugin. Il affiche le
+nombre de programmes futurs, le nombre de chaînes couvertes, l'horizon maximal
+observé et le nombre de chaînes atteignant la cible à six heures près. Les
+résultats dépendent du compte, de la région et des données publiées par chaque
+chaîne.
+
+`epg-endpoint-survey [1-6]` compare sur une même fenêtre l'ancien endpoint v2
+`power_guide` et l'endpoint v3 actuellement utilisé. Il affiche uniquement les
+tailles, durées, nombres de programmes et taux de présence des métadonnées,
+ainsi que le recouvrement entre les deux réponses. Aucun contenu éditorial,
+identifiant ou corps JSON n'est affiché.
+
+`epg-details-survey [1-100]` sélectionne des programmes futurs sur les six
+prochaines heures et demande jusqu'à cinq lots de 20 détails, espacés d'une
+seconde. Une erreur de transport déclenche un seul nouvel essai après deux
+secondes. La commande affiche uniquement le nombre de réponses contenant une
+description, un genre ou une numérotation saison/épisode, ainsi que la durée et
+le nombre de retries. Aucun titre, texte descriptif, identifiant ou corps JSON
+n'est affiché. La commande mesure l'intérêt et le coût de l'enrichissement avant
+son activation dans Emby.
 
 ## 2. Options d'une chaîne
 

@@ -61,6 +61,29 @@ non DRM. Cela représente 53,5 % du catalogue total. L'inventaire franchit donc
 la partie DRM de la porte GO / NO-GO, sous réserve que les chaînes effectivement
 souhaitées appartiennent à cet ensemble.
 
+## Validation réelle de la profondeur EPG
+
+Résultat réel de la commande `epg-survey 14` :
+
+```text
+Chaînes demandées                 : 493
+Chaînes avec un guide futur       : 491
+Programmes futurs                 : 214 215
+Horizon maximal observé           : 14,2 jours
+Chaînes atteignant la cible - 6 h : 490
+```
+
+La source EPG franchit sa porte de faisabilité : 99,6 % des chaînes ont des
+programmes futurs et 99,4 % du catalogue atteint presque toute la profondeur
+demandée. Les deux chaînes sans guide et la chaîne dont l'horizon est plus
+court ne bloquent pas l'import global.
+
+L'horizon de 14,2 jours n'indique pas une requête excessive. Un programme
+commençant avant la limite demandée peut se terminer après celle-ci et reste
+correctement inclus dans la plage. Ce sondage valide les données publiées par
+Zattoo et leur chargement par le Core. L'import dans la base Emby et la
+planification sont validés séparément ci-dessous.
+
 ## Probe réel — RTS 1 HD
 
 ```text
@@ -118,6 +141,13 @@ ne doit pas être construit.
 | Test HLS/MPEG-TS (`stream_type=hls`) | HTTP 403 après renouvellement : indisponible |
 | Test 30 s HLS7, une playlist vidéo + audio par défaut | PASS : 30,4 s média, zéro 404, zéro corruption |
 | Test 300 s HLS7, une playlist vidéo + audio par défaut | PASS : 300,7 s média en 303,6 s, vitesse 1,01×, zéro 404, zéro corruption ; 359 avertissements MOOV bénins |
+| Profondeur EPG réelle sur 14 jours | PASS : 214 215 programmes, 491 chaînes couvertes sur 493, dont 490 atteignant la cible à six heures près |
+| Chargement EPG réel sur 7 jours par le Core | PASS : 114 740 programmes en 27,7 s et 491 chaînes couvertes |
+| Import EPG natif dans Emby | PASS : première tâche en 7 min 16 s, seconde en 6 min 04 s, sans erreur signalée |
+| Planification et enregistrement DVR | PASS : programmation persistante, médiathèque créée, fichier produit et lisible, stream fermé proprement |
+| Sondage des détails EPG | PASS : cinq lots espacés, 100 réponses sur 100 sans retry en 4,1 s, dont 88 descriptions et 73 genres |
+| Comparaison des guides v2 et v3 | PASS : mêmes 3 840 programmes et mêmes métadonnées sur cinq heures, aucune description directe ; v3 conservé |
+| Cache de détails persistant | PASS automatisé : données inchangées réutilisées après redémarrage, programme modifié rechargé et portée de compte isolée |
 | Verdict GO / NO-GO | **GO** |
 
 ## Limites restantes
@@ -132,8 +162,14 @@ ne doit pas être construit.
 - les segments fMP4 produisent un avertissement `duplicated MOOV` récurrent que
   FFmpeg ignore ; aucune corruption ni dérive de vitesse n'a été observée, mais
   ce compteur devra rester surveillé pendant les tests Emby ;
-- aucun plugin Emby, EPG, Replay ou mécanisme de remux permanent n'a été ajouté.
+- le plugin Emby, le remux permanent, la source EPG et le parcours DVR sont
+  implémentés et validés ; l'enrichissement progressif et persistant des
+  descriptions est également validé sur le serveur réel ;
+- Replay, les enregistrements hébergés par Zattoo et Widevine restent absents.
 
-Le Milestone 3 est désormais débloqué. Le MVP Emby peut être construit avec la
-stratégie validée : URL HLS7 obtenue à la demande, résolution en mémoire d'une
-vidéo et de l'audio par défaut, puis remux sans réencodage.
+La lecture, la profondeur EPG côté fournisseur, les actualisations natives sur
+7 jours et le parcours DVR sont validés. Le chargeur de détails est désormais
+incrémental, persistant, limité en débit et indépendant de la durée de la tâche
+Emby. Une reprise réelle a réutilisé 34 826 détails déjà présents et n'en a
+chargé que 213 supplémentaires. L'actualisation suivante a rendu les
+descriptions visibles dans l'interface Emby.

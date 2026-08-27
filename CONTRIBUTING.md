@@ -13,7 +13,7 @@ dotnet test Emby.Zattoo.sln --configuration Release --no-build --no-restore
 dotnet format Emby.Zattoo.sln --verify-no-changes --no-restore
 ```
 
-The Release build places the two manual plugin files in
+The Release build places the single plugin DLL in
 `artifacts/Emby.Zattoo/`. Generated artifacts, build outputs and local tool
 caches must not be committed.
 

@@ -1,10 +1,10 @@
 # Emby MVP — installation et validation
 
-Le plugin 0.2.4 compile contre le SDK Emby stable 4.9.5.0
+Le plugin 1.0.0 compile contre le SDK Emby stable 4.9.5.0
 et `MediaBrowser.Server.Core` 4.9.1.90. Il inclut une page de configuration
 native Emby. Son chargement, sa configuration et l'import des chaînes ont été
-validés sur Emby Linux. La lecture de RTS 1 HD fonctionne dans Emby Web ; les
-tests d'arrêt, de changement de chaîne et de longue durée restent à effectuer.
+validés sur Emby Linux. La lecture de RTS 1 HD, l'arrêt, le changement de chaîne,
+la lecture continue et le parcours DVR fonctionnent dans Emby Web.
 
 ## Architecture du MVP
 
@@ -43,7 +43,10 @@ par `Close()`.
 - fermeture idempotente et arrêt forcé de FFmpeg après cinq secondes ;
 - assainissement central de toutes les lignes FFmpeg avant log.
 
-EPG, Replay, enregistrement et Widevine restent absents.
+L'EPG est présent dans les sources courantes et s'intègre à la tâche native
+**Actualiser le guide** d'Emby. Replay, enregistrements hébergés par Zattoo et
+Widevine restent absents. La planification et l'exécution d'un enregistrement
+Emby depuis le guide ont été validées sur serveur réel.
 
 ## Construire le paquet
 
@@ -83,9 +86,13 @@ Emby.Zattoo plugin loaded; DRM streams remain unsupported.
 2. Sur **Zattoo Live TV**, ouvrir **Settings**.
 3. Saisir le compte Zattoo, choisir la qualité et renseigner le chemin FFmpeg.
 4. Conserver `https://zattoo.com/` comme Provider URL sauf compte revendeur.
-5. Enregistrer. Le tuner prendra la nouvelle configuration sans redémarrage.
-6. Ouvrir **Live TV → Tuner Devices → Add** et choisir **Zattoo**.
-7. Enregistrer le tuner puis actualiser les chaînes.
+5. Conserver **Enrich guide descriptions** activé pour charger les résumés et
+   genres manquants en arrière-plan.
+6. Enregistrer. Le tuner prendra la nouvelle configuration sans redémarrage.
+7. Ouvrir **Live TV → Tuner Devices → Add** et choisir **Zattoo**.
+8. Enregistrer le tuner puis actualiser les chaînes.
+9. Configurer la profondeur du guide, de un à quatorze jours, puis lancer la
+   tâche Emby **Actualiser le guide**.
 
 Paramètres proposés :
 
@@ -105,6 +112,70 @@ déjà ouvert ; la nouvelle configuration est utilisée à la demande suivante.
 
 Le tuner peut utiliser l'option Emby `Import favorites only`. Sa limite initiale
 est fixée à un stream simultané.
+
+## Valider l'EPG
+
+Avant le test Emby, mesurer ce que le compte reçoit réellement :
+
+```powershell
+dotnet8 run --project '.\src\Zattoo.Spike\Zattoo.Spike.csproj' --configuration Release --no-build -- epg-survey 14
+```
+
+La commande affiche seulement des totaux et des durées : nombre de chaînes avec
+guide, nombre de programmes, horizon maximal et nombre de chaînes approchant la
+profondeur demandée. Elle n'affiche aucun cookie, jeton ou corps de réponse.
+
+Le sondage réel sur 14 jours a retourné 214 215 programmes futurs pour 491 des
+493 chaînes. Parmi elles, 490 atteignent la profondeur demandée à six heures
+près. L'horizon maximal de 14,2 jours provient d'une émission qui commence avant
+la limite et se termine après ; il ne signale pas un dépassement des requêtes.
+
+Le sondage seul valide la source Zattoo et le chargement par le Core ; l'import
+dans la base Emby et l'enregistrement exigent les tests serveur suivants.
+
+Le chargement réel sur 7 jours a ensuite retourné 114 740 programmes en
+27,7 secondes. La première tâche native Emby a importé ces données en
+7 min 16 s et s'est terminée normalement. Cette durée inclut principalement le
+traitement et l'écriture du guide dans la base Emby, pas seulement les requêtes
+Zattoo. Une seconde actualisation s'est terminée en 6 min 04 s. Les logs montrent
+les sauvegardes et suppressions incrémentales effectuées chaîne par chaîne par
+le dépôt SQLite d'Emby.
+
+La programmation a ensuite survécu à l'actualisation, la médiathèque
+d'enregistrements a été créée, le fichier produit était lisible et le stream a
+été fermé proprement. Le parcours DVR est donc validé sur le serveur réel.
+
+L'enrichissement détaillé est volontairement asynchrone. Son cache persiste dans
+le dossier de données du plugin et survit donc aux redémarrages. Une empreinte
+des données de base permet de réutiliser les détails d'un programme inchangé ;
+seuls les programmes nouveaux ou modifiés sont remis en file. Les réponses
+encore sans description sont retentées de manière espacée et toutes les entrées
+sont purgées six heures après la fin du programme.
+
+Les lots contiennent au maximum 20 identifiants et sont espacés d'une seconde.
+Les programmes courants et suivants sont traités avant les favoris, puis viennent
+les prochaines 24 heures. Le guide de base reste complet sur toute la profondeur
+demandée, mais un programme non favori plus éloigné attend d'entrer dans cette
+fenêtre glissante avant le chargement de sa description. Ouvrir une chaîne
+redonne la priorité à son programme courant et au suivant, sans bloquer la
+lecture. Une nouvelle actualisation native Emby reste nécessaire pour importer
+dans sa base les descriptions déjà arrivées dans le cache du plugin.
+
+Après installation de la nouvelle DLL :
+
+1. ouvrir les tâches planifiées du serveur Emby ;
+2. exécuter **Actualiser le guide** ;
+3. vérifier le message `Refreshing guide with ... days of guide data` ;
+4. ouvrir le guide et contrôler plusieurs chaînes et plusieurs jours ;
+5. suivre les logs `Zattoo guide detail enrichment ...` jusqu'au message de fin ;
+6. relancer **Actualiser le guide** et vérifier les descriptions disponibles ;
+7. programmer un enregistrement ponctuel depuis une émission future ;
+8. relancer l'actualisation et vérifier que la programmation demeure associée
+   à la même émission.
+
+La présence de quatorze jours dépend de Zattoo. Le plugin accepte toute plage
+transmise par Emby jusqu'à cette profondeur, mais ne fabrique pas les programmes
+absents de la réponse du fournisseur.
 
 ## Validation Milestone 3
 

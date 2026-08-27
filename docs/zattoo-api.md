@@ -124,7 +124,7 @@ Le `cid` est l'identifiant stable à conserver. Un index ou la position courante
 ne doit pas servir d'identité. Pour Milestone 1, les numéros sont attribués dans
 l'ordre de la réponse et les favoris sont exposés par `IsFavorite`.
 
-### Guide EPG (analysé, non implémenté)
+### Guide EPG
 
 | Élément | Valeur observée |
 |---|---|
@@ -133,13 +133,72 @@ l'ordre de la réponse et les favoris sont exposés par `IsFavorite`.
 | Paramètres | `start`, `end` (timestamps Unix), `format=json` |
 | Cookies requis | session authentifiée |
 | Réponse utile | objet `channels`, puis programmes par `cid`; champs courts `id`, `s`, `e`, `t`, `et`, `g`, `i_t` |
-| Validité observée dans la référence | requêtes découpées en fenêtres de cinq heures ; cache local utilisé par Kodi |
+| Validité observée dans la référence | requêtes découpées en fenêtres de cinq heures ; durée contractuelle non documentée |
 | Erreurs | JSON invalide/absence de chaîne : plage non chargée ; `401`/`403` doit déclencher au plus une réauthentification |
 
-Détails complémentaires :
+Le Core implémente cette opération dans `ZattooGuideService`. La plage demandée
+est couverte par des fenêtres fixes de cinq heures. Chaque fenêtre contient les
+programmes de plusieurs chaînes et reste en mémoire pendant 30 minutes. Emby
+demandant son guide chaîne par chaîne, cette organisation permet aux chaînes
+suivantes de réutiliser la même réponse. Un sémaphore empêche deux demandes
+concurrentes de télécharger simultanément une fenêtre absente du cache.
+
+Les deux formes observées pour `channels` sont acceptées : objet indexé par
+`cid`, et ancien tableau d'objets contenant `cid` et `programs`. Les entrées
+malformées sont ignorées individuellement ; un document sans collection de
+chaînes est rejeté. Les programmes sont filtrés sur la plage exacte, dédupliqués
+et triés avant leur transmission à Emby.
+
+Les champs détaillés `d`, `s_no`, `e_no` et `i_url` sont utilisés lorsqu'ils
+sont présents directement dans le guide. L'image `i_t` est transformée en URL
+HTTPS Zattoo lorsqu'aucune URL complète n'est fournie.
+
+Endpoint de détails complémentaires observé :
 `GET /zapi/v2/cached/program/power_details/{power_guide_hash}` avec
 `complete=True&program_ids=<liste>`. La réponse fournit notamment `d`, `s_no` et
-`e_no`. Cette opération sera revue lors du milestone EPG.
+`e_no`. Le client Core accepte un lot dédupliqué de 20 identifiants au maximum,
+renouvelle la session une seule fois après `401`/`403` et rejette un document
+invalide. Un premier appel réel contenant 100 identifiants n'a retourné que
+20 détails. Cette taille correspond aussi au lot utilisé par le chargeur de
+détails progressif de l'implémentation PVR de référence.
+
+La commande `epg-endpoint-survey` compare le contenu exploitable de ce guide v3
+à `/zapi/v2/cached/program/power_guide/{power_guide_hash}` sur une fenêtre
+identique. Elle ne journalise que des compteurs anonymes. Elle sert à déterminer
+si le guide v2 fournit directement assez de descriptions pour éviter une part
+des appels à `power_details`.
+
+Le sondage réel sur cinq heures a trouvé exactement les mêmes 3 840 programmes
+dans les deux réponses, avec les mêmes titres d'épisode, genres, numéros et
+images, mais aucune description directe dans l'une ou l'autre. Le v2 était
+légèrement plus volumineux et plus lent sur cet échantillon. Le plugin conserve
+donc le guide v3 et utilise `power_details` pour les descriptions manquantes.
+
+La commande `epg-details-survey` utilise jusqu'à cinq lots et ne révèle aucun
+contenu. Dans Emby, le chargement exhaustif synchrone est remplacé par un worker
+progressif : il traite les lots de 20 à une seconde d'intervalle, sans bloquer
+la tâche native du guide. Les programmes courants et suivants passent en
+premier, puis les chaînes favorites et les prochaines 24 heures. Le reste du
+guide n'est pas enrichi par avance, mais le guide de base conserve toute la
+profondeur demandée. L'ouverture d'un stream replace le programme courant et le
+suivant de la chaîne en tête de file.
+
+Le cache retient les détails retournés ainsi que les réponses incomplètes. Il
+est enregistré dans un journal JSON local, isolé par une portée de compte
+hachée et compacté périodiquement. L'empreinte du programme permet de réutiliser
+une entrée après un redémarrage lorsque le guide de base n'a pas changé. Les
+requêtes déjà en vol sont dédupliquées ; une donnée nouvelle ou modifiée est
+rechargée, tandis qu'une réponse sans description est retentée plus tard. Une
+entrée est supprimée six heures après la fin du programme.
+
+Le sondage réel en cinq lots espacés a retourné les 100 détails demandés sans
+retry en 4,1 secondes. Parmi eux, 88 contenaient une description et 73 au moins
+un genre. Aucun ne contenait de numéro de saison ou d'épisode dans cet
+échantillon. En extrapolant la limite de 20 éléments aux 114 740 programmes du
+guide sur sept jours, un chargement exhaustif nécessiterait 5 737 requêtes et
+environ 96 minutes à la cadence prudente d'un lot par seconde. Il ne doit donc
+pas bloquer la tâche native Emby et n'est pas exécuté : la fenêtre glissante et
+les favoris bornent le volume réellement enrichi.
 
 ### Stream Live (implémenté dans le spike)
 
