@@ -13,6 +13,7 @@ public sealed class ZattooRuntimeSettingsTests
             Username = " user@example.invalid ",
             Password = "encrypted-value-not-used-here",
             PreferredQuality = ZattooPreferredQuality.P720,
+            EnableGuideDetails = false,
             FfmpegPath = " /opt/emby-server/bin/ffmpeg ",
             ProviderUrl = "https://zattoo.example/",
             ApplicationVersion = "3.2120.1",
@@ -25,8 +26,36 @@ public sealed class ZattooRuntimeSettingsTests
         Assert.Equal("user@example.invalid", settings.ClientOptions.Username);
         Assert.Equal("decrypted-test-password", settings.ClientOptions.Password);
         Assert.Equal(new Uri("https://zattoo.example/"), settings.ClientOptions.ProviderBaseUri);
-        Assert.Equal("Emby.Zattoo.Plugin/0.2.4", settings.ClientOptions.UserAgent);
+        Assert.Equal("Emby.Zattoo.Plugin/1.0.0", settings.ClientOptions.UserAgent);
+        Assert.False(settings.ClientOptions.EnableBackgroundGuideDetails);
         Assert.Equal(ZattooPreferredQuality.P720, settings.PreferredQuality);
         Assert.Equal("/opt/emby-server/bin/ffmpeg", settings.FfmpegPath);
+    }
+
+    [Fact]
+    public void FromConfiguration_ScopesPersistentGuideCacheWithoutAccountName()
+    {
+        var options = new ZattooPluginOptions
+        {
+            Username = "private-account@example.invalid",
+            Password = "encrypted-value-not-used-here",
+            EnableGuideDetails = true,
+            ProviderUrl = "https://zattoo.example/",
+        };
+        var dataFolder = Path.Combine(Path.GetTempPath(), "plugin-data-fixture");
+
+        var settings = ZattooRuntimeSettings.FromConfiguration(
+            options,
+            "decrypted-test-password",
+            dataFolder);
+
+        Assert.Equal(
+            Path.Combine(dataFolder, "guide-details-cache-v1.jsonl"),
+            settings.ClientOptions.GuideDetailsCachePath);
+        Assert.Equal(64, settings.ClientOptions.GuideDetailsCacheScope.Length);
+        Assert.DoesNotContain(
+            "private-account",
+            settings.ClientOptions.GuideDetailsCacheScope,
+            StringComparison.OrdinalIgnoreCase);
     }
 }

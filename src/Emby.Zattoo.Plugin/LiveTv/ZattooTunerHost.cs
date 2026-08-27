@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Emby.Zattoo.Models;
 using Emby.Zattoo.Zattoo;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
@@ -37,7 +38,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
 
         public override bool SupportsGuideData(TunerHostInfo tuner)
         {
-            return false;
+            return true;
         }
 
         public override bool SupportsRemappingGuideData(TunerHostInfo tuner)
@@ -52,9 +53,26 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 Type = Type,
                 FriendlyName = Name,
                 TunerCount = 1,
-                ImportGuideData = false,
+                ImportGuideData = true,
                 AllowHWTranscoding = false,
             };
+        }
+
+        protected override async Task<List<ProgramInfo>> GetProgramsInternal(
+            TunerHostInfo tuner,
+            string tunerChannelId,
+            DateTimeOffset startDateUtc,
+            DateTimeOffset endDateUtc,
+            CancellationToken cancellationToken)
+        {
+            var context = RequireClient();
+            var programs = await context.Client.GetProgramsAsync(
+                    new[] { tunerChannelId },
+                    startDateUtc,
+                    endDateUtc,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return programs.Select(ZattooProgramMapper.Map).ToList();
         }
 
         protected override async Task<List<ChannelInfo>> GetChannelsInternal(
@@ -100,9 +118,11 @@ namespace Emby.Zattoo.Plugin.LiveTv
         {
             cancellationToken.ThrowIfCancellationRequested();
             var context = RequireClient();
+            var channelId = tunerChannel.TunerChannelId ?? tunerChannel.Id;
+            context.Client.PrioritizeGuideDetails(channelId);
             ILiveStream stream = new ZattooLiveStream(
                 tuner.Id,
-                tunerChannel.TunerChannelId ?? tunerChannel.Id,
+                channelId,
                 tunerChannel.Name,
                 context.Client,
                 context.Settings.PreferredQuality,
@@ -154,9 +174,12 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 var settings = plugin.GetRuntimeSettings(out var revision);
                 if (client == null || clientConfigurationRevision != revision)
                 {
+                    settings.ClientOptions.GuideDetailsProgress =
+                        LogGuideDetailsProgress;
                     var replacement = new ZattooClient(settings.ClientOptions);
                     if (client != null)
                     {
+                        client.StopGuideEnrichment();
                         retiredClients.Add(client);
                     }
 
@@ -166,6 +189,46 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 }
 
                 return new ClientContext(client, settings);
+            }
+        }
+
+        private void LogGuideDetailsProgress(ZattooGuideDetailsProgress progress)
+        {
+            switch (progress.Kind)
+            {
+                case ZattooGuideDetailsProgressKind.Started:
+                    Logger.Info(
+                        "Zattoo guide detail enrichment started; {0} pending, {1} cached.",
+                        progress.PendingPrograms,
+                        progress.CachedPrograms);
+                    break;
+                case ZattooGuideDetailsProgressKind.Progress:
+                    Logger.Info(
+                        "Zattoo guide detail enrichment progress; {0} processed, {1} pending, {2} cached, {3} removed.",
+                        progress.ProcessedPrograms,
+                        progress.PendingPrograms,
+                        progress.CachedPrograms,
+                        progress.RemovedPrograms);
+                    break;
+                case ZattooGuideDetailsProgressKind.Retrying:
+                    Logger.Warn(
+                        "Zattoo guide detail enrichment will retry; {0} failed batch(es), {1} pending.",
+                        progress.FailedBatches,
+                        progress.PendingPrograms);
+                    break;
+                case ZattooGuideDetailsProgressKind.Completed:
+                    Logger.Info(
+                        "Zattoo guide detail enrichment completed; {0} processed, {1} cached, {2} removed.",
+                        progress.ProcessedPrograms,
+                        progress.CachedPrograms,
+                        progress.RemovedPrograms);
+                    break;
+                case ZattooGuideDetailsProgressKind.Stopped:
+                    Logger.Info(
+                        "Zattoo guide detail enrichment stopped; {0} pending, {1} cached.",
+                        progress.PendingPrograms,
+                        progress.CachedPrograms);
+                    break;
             }
         }
 

@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Security.Cryptography;
+using Emby.Zattoo.Models;
 
 namespace Emby.Zattoo.Zattoo
 {
@@ -24,6 +26,22 @@ namespace Emby.Zattoo.Zattoo
         public string DeviceId { get; set; } = GenerateDeviceId();
 
         public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+        public TimeSpan GuideCacheDuration { get; set; } = TimeSpan.FromMinutes(30);
+
+        public bool EnableBackgroundGuideDetails { get; set; }
+
+        public TimeSpan GuideDetailsRequestInterval { get; set; } =
+            TimeSpan.FromSeconds(1);
+
+        public TimeSpan GuideDetailsRetryDelay { get; set; } =
+            TimeSpan.FromSeconds(30);
+
+        public Action<ZattooGuideDetailsProgress>? GuideDetailsProgress { get; set; }
+
+        public string GuideDetailsCachePath { get; set; } = string.Empty;
+
+        public string GuideDetailsCacheScope { get; set; } = string.Empty;
 
         internal void Validate()
         {
@@ -53,6 +71,37 @@ namespace Emby.Zattoo.Zattoo
             if (RequestTimeout <= TimeSpan.Zero && RequestTimeout != System.Threading.Timeout.InfiniteTimeSpan)
             {
                 throw new ArgumentOutOfRangeException(nameof(RequestTimeout));
+            }
+
+            if (GuideCacheDuration <= TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(nameof(GuideCacheDuration));
+            }
+
+            if (GuideDetailsRequestInterval < TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(GuideDetailsRequestInterval));
+            }
+
+            if (GuideDetailsRetryDelay < TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(nameof(GuideDetailsRetryDelay));
+            }
+
+            var hasCachePath = !string.IsNullOrWhiteSpace(GuideDetailsCachePath);
+            var hasCacheScope = !string.IsNullOrWhiteSpace(GuideDetailsCacheScope);
+            if (hasCachePath != hasCacheScope)
+            {
+                throw new ArgumentException(
+                    "The guide detail cache path and scope must be configured together.");
+            }
+
+            if (hasCachePath && !Path.IsPathRooted(GuideDetailsCachePath))
+            {
+                throw new ArgumentException(
+                    "The guide detail cache path must be absolute.",
+                    nameof(GuideDetailsCachePath));
             }
         }
 

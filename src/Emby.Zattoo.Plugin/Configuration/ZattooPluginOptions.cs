@@ -30,6 +30,12 @@ namespace Emby.Zattoo.Plugin.Configuration
         public ZattooPreferredQuality PreferredQuality { get; set; } =
             ZattooPreferredQuality.Auto;
 
+        [DisplayName("Enrich guide descriptions")]
+        [Description(
+            "Loads detailed descriptions and genres progressively in the background. "
+            + "The native Emby guide refresh does not wait for this process.")]
+        public bool EnableGuideDetails { get; set; } = true;
+
         [DisplayName("FFmpeg executable")]
         [Description("Absolute Linux path to ffmpeg, or 'ffmpeg' when it is available in Emby's PATH.")]
         [EditFilePicker]

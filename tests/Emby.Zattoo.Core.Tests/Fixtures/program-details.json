@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "programs": [
+    {
+      "id": 1002,
+      "et": "Épisode détaillé fictif",
+      "d": "Description détaillée fictive utilisée uniquement par les tests.",
+      "g": ["Magazine", "Culture", "Magazine"],
+      "s_no": 2,
+      "e_no": 3
+    },
+    {
+      "id": "2001",
+      "d": "",
+      "g": []
+    },
+    {
+      "id": 1002,
+      "d": "Cette entrée dupliquée doit être ignorée."
+    },
+    {
+      "d": "Une entrée sans identifiant doit être ignorée."
+    }
+  ]
+}

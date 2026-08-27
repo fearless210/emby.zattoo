@@ -19,6 +19,21 @@ namespace Emby.Zattoo.Zattoo
         Task<IReadOnlyList<ZattooChannel>> GetChannelsAsync(
             CancellationToken cancellationToken = default);
 
+        Task<IReadOnlyList<ZattooProgram>> GetProgramsAsync(
+            IReadOnlyCollection<string> channelIds,
+            DateTimeOffset startTime,
+            DateTimeOffset endTime,
+            CancellationToken cancellationToken = default);
+
+        Task<IReadOnlyList<ZattooProgramDetails>> GetProgramDetailsAsync(
+            IReadOnlyCollection<string> programIds,
+            CancellationToken cancellationToken = default);
+
+        Task<ZattooGuideEndpointComparison> CompareGuideEndpointsAsync(
+            DateTimeOffset startTime,
+            DateTimeOffset endTime,
+            CancellationToken cancellationToken = default);
+
         Task<IReadOnlyList<ZattooStream>> GetStreamOptionsAsync(
             string channelId,
             CancellationToken cancellationToken = default);
@@ -33,6 +48,10 @@ namespace Emby.Zattoo.Zattoo
             ZattooPreferredQuality preferredQuality,
             ZattooStreamFormat preferredFormat,
             CancellationToken cancellationToken = default);
+
+        void StopGuideEnrichment();
+
+        void PrioritizeGuideDetails(string channelId);
 
         void Invalidate();
     }

@@ -47,6 +47,23 @@ internal sealed class FakeZattooTransport : IZattooTransport
         }
     }
 
+    public TaskCompletionSource<bool> EnqueueDeferred(
+        HttpMethod method,
+        string relativePath,
+        HttpStatusCode statusCode,
+        string content)
+    {
+        var release = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (syncRoot)
+        {
+            expectedRequests.Enqueue(
+                new ExpectedRequest(method, relativePath, statusCode, content, release.Task));
+        }
+
+        return release;
+    }
+
     public Task<ZattooTransportResponse> GetAsync(
         string relativePath,
         CancellationToken cancellationToken)
@@ -108,8 +125,19 @@ internal sealed class FakeZattooTransport : IZattooTransport
                     ? null
                     : new Dictionary<string, string>(fields, StringComparer.Ordinal)));
 
-            return Task.FromResult(new ZattooTransportResponse(expected.StatusCode, expected.Content));
+            return expected.Release == null
+                ? Task.FromResult(
+                    new ZattooTransportResponse(expected.StatusCode, expected.Content))
+                : CompleteDeferredAsync(expected, cancellationToken);
         }
+    }
+
+    private static async Task<ZattooTransportResponse> CompleteDeferredAsync(
+        ExpectedRequest expected,
+        CancellationToken cancellationToken)
+    {
+        await expected.Release!.WaitAsync(cancellationToken);
+        return new ZattooTransportResponse(expected.StatusCode, expected.Content);
     }
 
     private sealed class ExpectedRequest
@@ -118,12 +146,14 @@ internal sealed class FakeZattooTransport : IZattooTransport
             HttpMethod method,
             string relativePath,
             HttpStatusCode statusCode,
-            string content)
+            string content,
+            Task? release = null)
         {
             Method = method;
             RelativePath = relativePath;
             StatusCode = statusCode;
             Content = content;
+            Release = release;
         }
 
         public HttpMethod Method { get; }
@@ -133,6 +163,8 @@ internal sealed class FakeZattooTransport : IZattooTransport
         public HttpStatusCode StatusCode { get; }
 
         public string Content { get; }
+
+        public Task? Release { get; }
     }
 }
 internal sealed class RecordedRequest

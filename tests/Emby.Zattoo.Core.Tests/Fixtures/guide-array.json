@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "channels": [
+    {
+      "cid": "tsr1",
+      "programs": [
+        {
+          "id": 3001,
+          "s": 1800000900,
+          "e": 1800002700,
+          "t": "Ancien format de guide",
+          "g": []
+        }
+      ]
+    }
+  ]
+}

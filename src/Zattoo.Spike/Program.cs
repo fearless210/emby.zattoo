@@ -64,6 +64,15 @@ try
     {
         "channels" => await PrintChannelsAsync(client, cancellation.Token),
         "survey" => await PrintSurveyAsync(client, cancellation.Token),
+        "epg-survey" => await PrintEpgSurveyAsync(client, args, cancellation.Token),
+        "epg-endpoint-survey" => await PrintEpgEndpointSurveyAsync(
+            client,
+            args,
+            cancellation.Token),
+        "epg-details-survey" => await PrintEpgDetailsSurveyAsync(
+            client,
+            args,
+            cancellation.Token),
         "streams" => await PrintStreamsAsync(client, args, cancellation.Token),
         "probe" => await ProbeAsync(client, args, cancellation.Token),
         "ffmpeg-test" => await FfmpegTestAsync(client, args, cancellation.Token),
@@ -132,6 +141,209 @@ static async Task<int> PrintSurveyAsync(
     Console.WriteLine();
     Console.WriteLine("GO / NO-GO remains pending until a non-DRM stream passes probe and ffmpeg-test.");
     return 0;
+}
+
+static async Task<int> PrintEpgSurveyAsync(
+    IZattooClient client,
+    string[] arguments,
+    CancellationToken cancellationToken)
+{
+    var days = 14;
+    if (arguments.Length >= 2
+        && (!int.TryParse(arguments[1], out days) || days < 1 || days > 14))
+    {
+        Console.Error.WriteLine("EPG depth must be between 1 and 14 days.");
+        return 2;
+    }
+
+    var channels = await client.GetChannelsAsync(cancellationToken);
+    var now = DateTimeOffset.UtcNow;
+    var requestedStart = now.AddHours(-1);
+    var requestedEnd = requestedStart.AddDays(days);
+    var programs = await client.GetProgramsAsync(
+        channels.Select(channel => channel.Id).ToArray(),
+        requestedStart,
+        requestedEnd,
+        cancellationToken);
+    var futurePrograms = programs
+        .Where(program => program.EndDate > now)
+        .ToArray();
+    var channelsWithGuide = futurePrograms
+        .Select(program => program.ChannelId)
+        .Distinct(StringComparer.Ordinal)
+        .Count();
+    var coverageThreshold = requestedEnd.AddHours(-6);
+    var channelsNearRequestedHorizon = futurePrograms
+        .GroupBy(program => program.ChannelId, StringComparer.Ordinal)
+        .Count(group => group.Max(program => program.EndDate) >= coverageThreshold);
+    var observedHorizon = futurePrograms.Length == 0
+        ? TimeSpan.Zero
+        : futurePrograms.Max(program => program.EndDate) - now;
+
+    Console.WriteLine("Zattoo EPG survey");
+    Console.WriteLine();
+    Console.WriteLine($"Requested depth              : {days} day(s)");
+    Console.WriteLine($"Channels requested           : {channels.Count}");
+    Console.WriteLine($"Channels with future guide   : {channelsWithGuide}");
+    Console.WriteLine($"Future programs              : {futurePrograms.Length}");
+    Console.WriteLine($"Longest observed horizon     : {observedHorizon.TotalDays:F1} day(s)");
+    Console.WriteLine(
+        $"Channels reaching target - 6h: {channelsNearRequestedHorizon}");
+    Console.WriteLine();
+    Console.WriteLine(
+        "Coverage depends on the account, region, channel and data currently published by Zattoo.");
+    return futurePrograms.Length > 0 ? 0 : 1;
+}
+
+static async Task<int> PrintEpgDetailsSurveyAsync(
+    IZattooClient client,
+    string[] arguments,
+    CancellationToken cancellationToken)
+{
+    var sampleSize = 100;
+    if (arguments.Length >= 2
+        && (!int.TryParse(arguments[1], out sampleSize)
+            || sampleSize < 1
+            || sampleSize > 100))
+    {
+        Console.Error.WriteLine("EPG detail sample size must be between 1 and 100.");
+        return 2;
+    }
+
+    var channels = await client.GetChannelsAsync(cancellationToken);
+    var now = DateTimeOffset.UtcNow;
+    var programs = await client.GetProgramsAsync(
+        channels.Select(channel => channel.Id).ToArray(),
+        now.AddMinutes(-30),
+        now.AddHours(6),
+        cancellationToken);
+    var sampledIds = programs
+        .Where(program => program.EndDate > now)
+        .Select(program => program.Id)
+        .Distinct(StringComparer.Ordinal)
+        .Take(sampleSize)
+        .ToArray();
+    if (sampledIds.Length == 0)
+    {
+        Console.Error.WriteLine("No future program was available for the detail survey.");
+        return 1;
+    }
+
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    var details = new List<ZattooProgramDetails>();
+    var requestCount = 0;
+    var retryCount = 0;
+    var batches = sampledIds.Chunk(20).ToArray();
+    for (var batchIndex = 0; batchIndex < batches.Length; batchIndex++)
+    {
+        if (batchIndex > 0)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+        }
+
+        try
+        {
+            details.AddRange(
+                await client.GetProgramDetailsAsync(
+                    batches[batchIndex],
+                    cancellationToken));
+        }
+        catch (ZattooTransportException)
+        {
+            retryCount++;
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+            try
+            {
+                details.AddRange(
+                    await client.GetProgramDetailsAsync(
+                        batches[batchIndex],
+                        cancellationToken));
+            }
+            catch (ZattooTransportException)
+            {
+                throw new ZattooTransportException(
+                    $"Program detail batch {batchIndex + 1} of {batches.Length} failed after one retry.");
+            }
+        }
+
+        requestCount++;
+    }
+
+    stopwatch.Stop();
+
+    Console.WriteLine("Zattoo EPG detail survey");
+    Console.WriteLine();
+    Console.WriteLine($"Programs requested        : {sampledIds.Length}");
+    Console.WriteLine($"Detail requests           : {requestCount}");
+    Console.WriteLine($"Transport retries         : {retryCount}");
+    Console.WriteLine($"Details returned          : {details.Count}");
+    Console.WriteLine(
+        $"With description          : {details.Count(detail => !string.IsNullOrWhiteSpace(detail.Overview))}");
+    Console.WriteLine(
+        $"With season or episode no.: {details.Count(detail => detail.SeasonNumber.HasValue || detail.EpisodeNumber.HasValue)}");
+    Console.WriteLine(
+        $"With genres               : {details.Count(detail => detail.Genres.Count > 0)}");
+    Console.WriteLine($"Detail survey elapsed     : {stopwatch.Elapsed.TotalSeconds:F1}s");
+    Console.WriteLine();
+    Console.WriteLine(
+        "No title, description, identifier, cookie, token or response body was displayed.");
+    return details.Count > 0 ? 0 : 1;
+}
+
+static async Task<int> PrintEpgEndpointSurveyAsync(
+    IZattooClient client,
+    string[] arguments,
+    CancellationToken cancellationToken)
+{
+    var hours = 5;
+    if (arguments.Length >= 2
+        && (!int.TryParse(arguments[1], out hours) || hours < 1 || hours > 6))
+    {
+        Console.Error.WriteLine("EPG comparison depth must be between 1 and 6 hours.");
+        return 2;
+    }
+
+    var start = DateTimeOffset.UtcNow;
+    var comparison = await client.CompareGuideEndpointsAsync(
+        start,
+        start.AddHours(hours),
+        cancellationToken);
+
+    Console.WriteLine("Zattoo EPG endpoint survey");
+    Console.WriteLine();
+    Console.WriteLine($"Compared window             : {hours} hour(s)");
+    PrintGuideEndpointMetrics("v2 power_guide", comparison.Version2);
+    PrintGuideEndpointMetrics("v3 guide", comparison.Version3);
+    Console.WriteLine();
+    Console.WriteLine($"Shared programs             : {comparison.SharedPrograms}");
+    Console.WriteLine($"Programs only in v2         : {comparison.Version2OnlyPrograms}");
+    Console.WriteLine($"Programs only in v3         : {comparison.Version3OnlyPrograms}");
+    Console.WriteLine(
+        $"Shared descriptions v2 only: {comparison.SharedDescriptionsOnlyInVersion2}");
+    Console.WriteLine(
+        $"Shared descriptions v3 only: {comparison.SharedDescriptionsOnlyInVersion3}");
+    Console.WriteLine();
+    Console.WriteLine(
+        "No title, description, identifier, cookie, token or response body was displayed.");
+    return comparison.SharedPrograms > 0 ? 0 : 1;
+}
+
+static void PrintGuideEndpointMetrics(
+    string label,
+    ZattooGuideEndpointMetrics metrics)
+{
+    Console.WriteLine();
+    Console.WriteLine(label);
+    Console.WriteLine($"  Response size             : {metrics.ResponseBytes} byte(s)");
+    Console.WriteLine($"  Request elapsed           : {metrics.Elapsed.TotalSeconds:F1}s");
+    Console.WriteLine($"  Channels with programs    : {metrics.ChannelsWithPrograms}");
+    Console.WriteLine($"  Programs                  : {metrics.Programs}");
+    Console.WriteLine($"  With description          : {metrics.ProgramsWithDescription}");
+    Console.WriteLine($"  With episode title        : {metrics.ProgramsWithEpisodeTitle}");
+    Console.WriteLine($"  With genres               : {metrics.ProgramsWithGenres}");
+    Console.WriteLine(
+        $"  With season or episode no.: {metrics.ProgramsWithSeasonOrEpisodeNumber}");
+    Console.WriteLine($"  With image                : {metrics.ProgramsWithImage}");
 }
 
 static async Task<int> PrintStreamsAsync(
@@ -392,6 +604,9 @@ static void PrintUsage()
     Console.WriteLine("Zattoo.Spike commands:");
     Console.WriteLine("  channels");
     Console.WriteLine("  survey");
+    Console.WriteLine("  epg-survey [1-14 days]");
+    Console.WriteLine("  epg-endpoint-survey [1-6 hours]");
+    Console.WriteLine("  epg-details-survey [1-100 programs]");
     Console.WriteLine("  streams <channel-id|number|exact-name>");
     Console.WriteLine("  probe <channel-id|number|exact-name> [auto|1080p|720p|540p] [dash|hls|hls-ts]");
     Console.WriteLine("  ffmpeg-test <channel-id|number|exact-name> [seconds] [auto|1080p|720p|540p] [dash|hls|hls-ts]");

@@ -44,7 +44,10 @@ namespace Emby.Zattoo.Plugin
             var options = GetOptions();
             var password = passwordStore.Unprotect(options.Password);
             revision = Interlocked.Read(ref configurationRevision);
-            return ZattooRuntimeSettings.FromConfiguration(options, password);
+            return ZattooRuntimeSettings.FromConfiguration(
+                options,
+                password,
+                DataFolderPath);
         }
 
         protected override ZattooPluginOptions OnBeforeShowUI(
@@ -55,6 +58,7 @@ namespace Emby.Zattoo.Plugin
                 Username = options.Username,
                 Password = passwordStore.GetDisplayValue(options.Password),
                 PreferredQuality = options.PreferredQuality,
+                EnableGuideDetails = options.EnableGuideDetails,
                 FfmpegPath = options.FfmpegPath,
                 ProviderUrl = options.ProviderUrl,
                 ApplicationVersion = options.ApplicationVersion,

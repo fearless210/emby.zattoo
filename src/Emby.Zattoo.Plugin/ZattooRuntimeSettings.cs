@@ -1,4 +1,7 @@
 using System;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using Emby.Zattoo.Exceptions;
 using Emby.Zattoo.Models;
 using Emby.Zattoo.Plugin.Configuration;
@@ -29,7 +32,8 @@ namespace Emby.Zattoo.Plugin
 
         public static ZattooRuntimeSettings FromConfiguration(
             ZattooPluginOptions configuration,
-            string decryptedPassword)
+            string decryptedPassword,
+            string? pluginDataFolder = null)
         {
             if (configuration == null)
             {
@@ -48,6 +52,7 @@ namespace Emby.Zattoo.Plugin
                 Username = configuration.Username.Trim(),
                 Password = decryptedPassword,
                 UserAgent = ClientUserAgent,
+                EnableBackgroundGuideDetails = configuration.EnableGuideDetails,
             };
 
             if (!Uri.TryCreate(
@@ -66,12 +71,42 @@ namespace Emby.Zattoo.Plugin
                 options.ApplicationVersion = configuration.ApplicationVersion.Trim();
             }
 
+            if (options.EnableBackgroundGuideDetails
+                && !string.IsNullOrWhiteSpace(pluginDataFolder))
+            {
+                options.GuideDetailsCachePath = Path.Combine(
+                    pluginDataFolder,
+                    "guide-details-cache-v1.jsonl");
+                options.GuideDetailsCacheScope = CreateCacheScope(
+                    options.ProviderBaseUri,
+                    options.Username,
+                    options.Language);
+            }
+
             return new ZattooRuntimeSettings(
                 options,
                 configuration.PreferredQuality,
                 string.IsNullOrWhiteSpace(configuration.FfmpegPath)
                     ? "ffmpeg"
                     : configuration.FfmpegPath.Trim());
+        }
+
+        private static string CreateCacheScope(
+            Uri providerBaseUri,
+            string username,
+            string language)
+        {
+            var value = providerBaseUri.GetLeftPart(UriPartial.Authority)
+                + "\n"
+                + username
+                + "\n"
+                + language;
+            using (var hash = SHA256.Create())
+            {
+                return BitConverter.ToString(
+                        hash.ComputeHash(Encoding.UTF8.GetBytes(value)))
+                    .Replace("-", string.Empty);
+            }
         }
     }
 }

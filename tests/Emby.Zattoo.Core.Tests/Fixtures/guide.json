@@ -1,0 +1,49 @@
+{
+  "success": true,
+  "channels": {
+    "tsr1": [
+      {
+        "id": 1001,
+        "s": 1800000000,
+        "e": 1800000900,
+        "t": "Programme commencé",
+        "g": ["Information"]
+      },
+      {
+        "id": 1002,
+        "s": 1800000900,
+        "e": 1800002700,
+        "t": "Magazine fictif",
+        "et": "Épisode pilote",
+        "d": "Description fictive utilisée uniquement par les tests.",
+        "g": ["Magazine", "Culture", "Magazine"],
+        "i_t": "fixture-image-token",
+        "s_no": 2,
+        "e_no": 3
+      },
+      {
+        "id": 1003,
+        "s": 1800011700,
+        "e": 1800013500,
+        "t": "Programme hors plage",
+        "g": []
+      },
+      {
+        "id": "invalid-entry",
+        "s": 1800002700,
+        "e": 1800002700,
+        "t": "Durée invalide"
+      }
+    ],
+    "tsr2": [
+      {
+        "id": "2001",
+        "s": "1800001200",
+        "e": "1800003000",
+        "t": "Documentaire fictif",
+        "g": ["Documentaire"],
+        "i_url": "http://images.zattic.com/cms/fixture/format_480x360.jpg"
+      }
+    ]
+  }
+}

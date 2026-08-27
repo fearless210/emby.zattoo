@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -39,6 +41,7 @@ namespace Emby.Zattoo.Zattoo
         private readonly ZattooClientOptions options;
         private readonly IZattooTransport transport;
         private readonly SemaphoreSlim sessionLock = new SemaphoreSlim(1, 1);
+        private readonly ZattooGuideService guideService;
         private readonly object stateLock = new object();
         private readonly Dictionary<string, ZattooChannel> channelsById
             = new Dictionary<string, ZattooChannel>(StringComparer.Ordinal);
@@ -55,6 +58,22 @@ namespace Emby.Zattoo.Zattoo
             this.options = options ?? throw new ArgumentNullException(nameof(options));
             this.transport = transport ?? throw new ArgumentNullException(nameof(transport));
             options.Validate();
+            ZattooGuideDetailsService? detailsService = null;
+            if (options.EnableBackgroundGuideDetails)
+            {
+                detailsService = new ZattooGuideDetailsService(
+                    options.GuideDetailsRequestInterval,
+                    options.GuideDetailsRetryDelay,
+                    LoadProgramDetailsBatchAsync,
+                    options.GuideDetailsProgress,
+                    options.GuideDetailsCachePath,
+                    options.GuideDetailsCacheScope);
+            }
+
+            guideService = new ZattooGuideService(
+                options.GuideCacheDuration,
+                LoadGuideWindowContentAsync,
+                detailsService);
         }
 
         public bool IsAuthenticated
@@ -123,6 +142,150 @@ namespace Emby.Zattoo.Zattoo
             }
 
             return channels;
+        }
+
+        public async Task<IReadOnlyList<ZattooProgram>> GetProgramsAsync(
+            IReadOnlyCollection<string> channelIds,
+            DateTimeOffset startTime,
+            DateTimeOffset endTime,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+            string[] favoriteChannelIds;
+            lock (stateLock)
+            {
+                favoriteChannelIds = channelsById.Values
+                    .Where(channel => channel.IsFavorite)
+                    .Select(channel => channel.Id)
+                    .ToArray();
+            }
+
+            return await guideService.GetProgramsAsync(
+                    channelIds,
+                    startTime,
+                    endTime,
+                    favoriteChannelIds,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        public async Task<IReadOnlyList<ZattooProgramDetails>> GetProgramDetailsAsync(
+            IReadOnlyCollection<string> programIds,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+            if (programIds == null)
+            {
+                throw new ArgumentNullException(nameof(programIds));
+            }
+
+            var normalizedIds = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var programId in programIds)
+            {
+                if (string.IsNullOrWhiteSpace(programId))
+                {
+                    throw new ArgumentException(
+                        "Program detail IDs cannot be empty.",
+                        nameof(programIds));
+                }
+
+                var normalized = programId.Trim();
+                if (seen.Add(normalized))
+                {
+                    normalizedIds.Add(normalized);
+                }
+            }
+
+            if (normalizedIds.Count == 0)
+            {
+                return Array.Empty<ZattooProgramDetails>();
+            }
+
+            if (normalizedIds.Count > 20)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(programIds),
+                    "At most 20 program details can be requested at once.");
+            }
+
+            return await LoadProgramDetailsBatchAsync(
+                    normalizedIds,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        public async Task<ZattooGuideEndpointComparison> CompareGuideEndpointsAsync(
+            DateTimeOffset startTime,
+            DateTimeOffset endTime,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+            var start = startTime.ToUniversalTime();
+            var end = endTime.ToUniversalTime();
+            if (end <= start)
+            {
+                throw new ArgumentException(
+                    "The guide comparison end time must be later than its start time.",
+                    nameof(endTime));
+            }
+
+            if (end - start > TimeSpan.FromHours(6))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(endTime),
+                    "The guide comparison range cannot exceed six hours.");
+            }
+
+            await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
+            var startSeconds = start.ToUnixTimeSeconds();
+            var endSeconds = end.ToUnixTimeSeconds();
+            var version2 = await LoadGuideEndpointForSurveyAsync(
+                    BuildLegacyGuidePath(startSeconds, endSeconds),
+                    "loading legacy guide data for comparison",
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var version3 = await LoadGuideEndpointForSurveyAsync(
+                    BuildGuidePath(startSeconds, endSeconds),
+                    "loading current guide data for comparison",
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            return CreateGuideEndpointComparison(start, end, version2, version3);
+        }
+
+        public void StopGuideEnrichment()
+        {
+            guideService.StopGuideEnrichment();
+        }
+
+        public void PrioritizeGuideDetails(string channelId)
+        {
+            ThrowIfDisposed();
+            if (string.IsNullOrWhiteSpace(channelId))
+            {
+                throw new ArgumentException(
+                    "A channel ID is required to prioritize guide details.",
+                    nameof(channelId));
+            }
+
+            guideService.PrioritizeGuideDetails(
+                channelId.Trim(),
+                DateTimeOffset.UtcNow);
+        }
+
+        private async Task<IReadOnlyList<ZattooProgramDetails>> LoadProgramDetailsBatchAsync(
+            IReadOnlyList<string> normalizedIds,
+            CancellationToken cancellationToken)
+        {
+            await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
+            var response = await SendAuthenticatedWithRetryAsync(
+                token => transport.GetAsync(
+                    BuildProgramDetailsPath(normalizedIds),
+                    token),
+                "loading program details",
+                cancellationToken).ConfigureAwait(false);
+            return ParseProgramDetails(response.Content);
         }
 
         public async Task<IReadOnlyList<ZattooStream>> GetStreamOptionsAsync(
@@ -221,6 +384,8 @@ namespace Emby.Zattoo.Zattoo
                 sessionInfo = null;
                 channelsById.Clear();
             }
+
+            guideService.Invalidate();
         }
 
         public void Dispose()
@@ -230,8 +395,10 @@ namespace Emby.Zattoo.Zattoo
                 return;
             }
 
+            guideService.StopGuideEnrichment();
             disposed = true;
             Invalidate();
+            guideService.Dispose();
             sessionLock.Dispose();
             transport.Dispose();
         }
@@ -605,6 +772,203 @@ namespace Emby.Zattoo.Zattoo
                 + "/channels";
         }
 
+        private async Task<string> LoadGuideWindowContentAsync(
+            long windowStart,
+            long windowEnd,
+            CancellationToken cancellationToken)
+        {
+            await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
+            var response = await SendAuthenticatedWithRetryAsync(
+                token => transport.GetAsync(
+                    BuildGuidePath(windowStart, windowEnd),
+                    token),
+                "loading guide data",
+                cancellationToken).ConfigureAwait(false);
+            return response.Content;
+        }
+
+        private string BuildGuidePath(long startTime, long endTime)
+        {
+            var info = SessionInfo;
+            if (info == null || string.IsNullOrWhiteSpace(info.PowerGuideHash))
+            {
+                throw new ZattooSessionExpiredException(
+                    "No active Zattoo guide session is available.");
+            }
+
+            return "/zapi/v3/cached/"
+                + Uri.EscapeDataString(info.PowerGuideHash)
+                + "/guide?end="
+                + endTime.ToString(CultureInfo.InvariantCulture)
+                + "&start="
+                + startTime.ToString(CultureInfo.InvariantCulture)
+                + "&format=json";
+        }
+
+        private string BuildLegacyGuidePath(long startTime, long endTime)
+        {
+            var info = SessionInfo;
+            if (info == null || string.IsNullOrWhiteSpace(info.PowerGuideHash))
+            {
+                throw new ZattooSessionExpiredException(
+                    "No active Zattoo guide session is available.");
+            }
+
+            return "/zapi/v2/cached/program/power_guide/"
+                + Uri.EscapeDataString(info.PowerGuideHash)
+                + "?end="
+                + endTime.ToString(CultureInfo.InvariantCulture)
+                + "&start="
+                + startTime.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private async Task<GuideEndpointSurveyDocument> LoadGuideEndpointForSurveyAsync(
+            string path,
+            string operation,
+            CancellationToken cancellationToken)
+        {
+            await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
+            var stopwatch = Stopwatch.StartNew();
+            var response = await SendAuthenticatedWithRetryAsync(
+                    token => transport.GetAsync(path, token),
+                    operation,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            stopwatch.Stop();
+            return new GuideEndpointSurveyDocument(
+                response.Content,
+                stopwatch.Elapsed);
+        }
+
+        private static ZattooGuideEndpointComparison CreateGuideEndpointComparison(
+            DateTimeOffset start,
+            DateTimeOffset end,
+            GuideEndpointSurveyDocument version2,
+            GuideEndpointSurveyDocument version3)
+        {
+            var version2Programs = ZattooGuideService.ParseProgramsForSurvey(
+                version2.Content);
+            var version3Programs = ZattooGuideService.ParseProgramsForSurvey(
+                version3.Content);
+            var version2ByIdentity = version2Programs
+                .GroupBy(CreateProgramIdentity, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var version3ByIdentity = version3Programs
+                .GroupBy(CreateProgramIdentity, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var sharedIdentities = version2ByIdentity.Keys
+                .Intersect(version3ByIdentity.Keys, StringComparer.Ordinal)
+                .ToArray();
+
+            return new ZattooGuideEndpointComparison
+            {
+                StartDate = start,
+                EndDate = end,
+                Version2 = CreateGuideEndpointMetrics(version2, version2Programs),
+                Version3 = CreateGuideEndpointMetrics(version3, version3Programs),
+                SharedPrograms = sharedIdentities.Length,
+                Version2OnlyPrograms = version2ByIdentity.Count - sharedIdentities.Length,
+                Version3OnlyPrograms = version3ByIdentity.Count - sharedIdentities.Length,
+                SharedDescriptionsOnlyInVersion2 = sharedIdentities.Count(identity =>
+                    !string.IsNullOrWhiteSpace(version2ByIdentity[identity].Overview)
+                    && string.IsNullOrWhiteSpace(version3ByIdentity[identity].Overview)),
+                SharedDescriptionsOnlyInVersion3 = sharedIdentities.Count(identity =>
+                    string.IsNullOrWhiteSpace(version2ByIdentity[identity].Overview)
+                    && !string.IsNullOrWhiteSpace(version3ByIdentity[identity].Overview)),
+            };
+        }
+
+        private static ZattooGuideEndpointMetrics CreateGuideEndpointMetrics(
+            GuideEndpointSurveyDocument document,
+            IReadOnlyCollection<ZattooProgram> programs)
+        {
+            return new ZattooGuideEndpointMetrics
+            {
+                ResponseBytes = Encoding.UTF8.GetByteCount(document.Content),
+                Elapsed = document.Elapsed,
+                ChannelsWithPrograms = programs
+                    .Select(program => program.ChannelId)
+                    .Distinct(StringComparer.Ordinal)
+                    .Count(),
+                Programs = programs.Count,
+                ProgramsWithDescription = programs.Count(program =>
+                    !string.IsNullOrWhiteSpace(program.Overview)),
+                ProgramsWithEpisodeTitle = programs.Count(program =>
+                    !string.IsNullOrWhiteSpace(program.EpisodeTitle)),
+                ProgramsWithGenres = programs.Count(program => program.Genres.Count > 0),
+                ProgramsWithSeasonOrEpisodeNumber = programs.Count(program =>
+                    program.SeasonNumber.HasValue || program.EpisodeNumber.HasValue),
+                ProgramsWithImage = programs.Count(program =>
+                    !string.IsNullOrWhiteSpace(program.ImageUrl)),
+            };
+        }
+
+        private static string CreateProgramIdentity(ZattooProgram program)
+        {
+            return program.ChannelId
+                + "\n"
+                + program.Id
+                + "\n"
+                + program.StartDate.UtcDateTime.Ticks.ToString(
+                    CultureInfo.InvariantCulture);
+        }
+
+        private string BuildProgramDetailsPath(IReadOnlyList<string> programIds)
+        {
+            var info = SessionInfo;
+            if (info == null || string.IsNullOrWhiteSpace(info.PowerGuideHash))
+            {
+                throw new ZattooSessionExpiredException(
+                    "No active Zattoo guide session is available.");
+            }
+
+            return "/zapi/v2/cached/program/power_details/"
+                + Uri.EscapeDataString(info.PowerGuideHash)
+                + "?complete=True&program_ids="
+                + string.Join(",", programIds.Select(Uri.EscapeDataString));
+        }
+
+        private static IReadOnlyList<ZattooProgramDetails> ParseProgramDetails(
+            string content)
+        {
+            var root = ParseObject(content, "program details response");
+            if (!ReadBoolean(root, "success")
+                || !root.TryGetProperty("programs", out var programs)
+                || programs.ValueKind != JsonValueKind.Array)
+            {
+                throw new ZattooProtocolException(
+                    "The Zattoo program details response is invalid.");
+            }
+
+            var result = new List<ZattooProgramDetails>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var element in programs.EnumerateArray())
+            {
+                if (element.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                var id = ReadIdentifier(element, "id");
+                if (id.Length == 0 || !seen.Add(id))
+                {
+                    continue;
+                }
+
+                result.Add(new ZattooProgramDetails
+                {
+                    Id = id,
+                    EpisodeTitle = EmptyToNull(ReadString(element, "et")),
+                    Overview = EmptyToNull(ReadString(element, "d")),
+                    Genres = ReadStringArray(element, "g"),
+                    SeasonNumber = ReadNonNegativeInt32(element, "s_no"),
+                    EpisodeNumber = ReadNonNegativeInt32(element, "e_no"),
+                });
+            }
+
+            return result;
+        }
+
         private static HashSet<string> ParseFavorites(string content)
         {
             var root = ParseObject(content, "favorites response");
@@ -893,6 +1257,67 @@ namespace Emby.Zattoo.Zattoo
             return null;
         }
 
+        private static int? ReadNonNegativeInt32(
+            JsonElement element,
+            string propertyName)
+        {
+            var value = ReadNullableInt32(element, propertyName);
+            return value >= 0 ? value : null;
+        }
+
+        private static string ReadIdentifier(JsonElement element, string propertyName)
+        {
+            if (!element.TryGetProperty(propertyName, out var property))
+            {
+                return string.Empty;
+            }
+
+            if (property.ValueKind == JsonValueKind.String)
+            {
+                return property.GetString()?.Trim() ?? string.Empty;
+            }
+
+            return property.ValueKind == JsonValueKind.Number
+                && property.TryGetInt64(out var numeric)
+                ? numeric.ToString(CultureInfo.InvariantCulture)
+                : string.Empty;
+        }
+
+        private static IReadOnlyList<string> ReadStringArray(
+            JsonElement element,
+            string propertyName)
+        {
+            if (!element.TryGetProperty(propertyName, out var property)
+                || property.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<string>();
+            }
+
+            var values = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in property.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                var value = item.GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(value) && seen.Add(value!))
+                {
+                    values.Add(value!);
+                }
+            }
+
+            return values;
+        }
+
+        private static string? EmptyToNull(string value)
+        {
+            var normalized = value.Trim();
+            return normalized.Length == 0 ? null : normalized;
+        }
+
         private static bool HasAccount(JsonElement element)
         {
             return element.TryGetProperty("account", out var account)
@@ -970,6 +1395,19 @@ namespace Emby.Zattoo.Zattoo
                 ServiceCountry = source.ServiceCountry,
                 PowerGuideHash = source.PowerGuideHash,
             };
+        }
+
+        private sealed class GuideEndpointSurveyDocument
+        {
+            public GuideEndpointSurveyDocument(string content, TimeSpan elapsed)
+            {
+                Content = content;
+                Elapsed = elapsed;
+            }
+
+            public string Content { get; }
+
+            public TimeSpan Elapsed { get; }
         }
 
         private void ThrowIfDisposed()
