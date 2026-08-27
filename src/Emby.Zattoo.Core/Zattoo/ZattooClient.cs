@@ -132,12 +132,30 @@ namespace Emby.Zattoo.Zattoo
                 cancellationToken).ConfigureAwait(false);
 
             var channels = ParseChannels(channelsResponse.Content, favorites);
+            var statistics = ZattooStreamStatistics.Calculate(channels);
+            var maximumPlayableHeight = channels
+                .SelectMany(channel => channel.Qualities)
+                .Where(quality => quality.IsAvailable && !quality.DrmRequired)
+                .Where(quality => quality.Height.HasValue)
+                .Select(quality => quality.Height)
+                .DefaultIfEmpty()
+                .Max();
             lock (stateLock)
             {
                 channelsById.Clear();
                 foreach (var channel in channels)
                 {
                     channelsById[channel.Id] = channel;
+                }
+
+                if (sessionInfo != null)
+                {
+                    sessionInfo.PlayableChannelCount =
+                        statistics.ChannelsWithNonDrmStreams;
+                    sessionInfo.DrmOnlyChannelCount = statistics.DrmOnlyChannels;
+                    sessionInfo.UnavailableChannelCount =
+                        statistics.ChannelsWithoutAvailableStreams;
+                    sessionInfo.MaximumPlayableHeight = maximumPlayableHeight;
                 }
             }
 
@@ -167,6 +185,13 @@ namespace Emby.Zattoo.Zattoo
                     favoriteChannelIds,
                     cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        public void SetImportedGuideChannels(
+            IReadOnlyCollection<string> channelIds)
+        {
+            ThrowIfDisposed();
+            guideService.SetImportedChannelIds(channelIds);
         }
 
         public async Task<IReadOnlyList<ZattooProgramDetails>> GetProgramDetailsAsync(
@@ -484,12 +509,31 @@ namespace Emby.Zattoo.Zattoo
             }
 
             var account = session.GetProperty("account");
+            var nonlive = session.TryGetProperty("nonlive", out var nonliveValue)
+                && nonliveValue.ValueKind == JsonValueKind.Object
+                ? nonliveValue
+                : default;
+            var recordingNumberLimit = nonlive.ValueKind == JsonValueKind.Object
+                ? ReadNullableInt32(nonlive, "recording_number_limit") ?? 0
+                : 0;
+            var explicitConcurrentStreamLimit =
+                ReadConcurrentStreamLimit(session, account, nonlive);
             var newSession = new ZattooSessionInfo
             {
                 IsActive = true,
                 CreatedAt = DateTimeOffset.UtcNow,
                 CountryCode = ReadString(session, "current_country"),
                 ServiceCountry = ReadString(account, "service_country"),
+                ReplayAvailable = nonlive.ValueKind == JsonValueKind.Object
+                    && string.Equals(
+                        ReadString(nonlive, "replay_availability"),
+                        "available",
+                        StringComparison.OrdinalIgnoreCase),
+                RecordingNumberLimit = Math.Max(0, recordingNumberLimit),
+                MaximumConcurrentStreams = explicitConcurrentStreamLimit
+                    ?? InferConcurrentStreamLimit(recordingNumberLimit),
+                ConcurrentStreamLimitIsInferred =
+                    !explicitConcurrentStreamLimit.HasValue,
                 PowerGuideHash = powerGuideHash,
             };
 
@@ -1393,8 +1437,59 @@ namespace Emby.Zattoo.Zattoo
                 CreatedAt = source.CreatedAt,
                 CountryCode = source.CountryCode,
                 ServiceCountry = source.ServiceCountry,
+                ReplayAvailable = source.ReplayAvailable,
+                RecordingNumberLimit = source.RecordingNumberLimit,
+                MaximumConcurrentStreams = source.MaximumConcurrentStreams,
+                ConcurrentStreamLimitIsInferred =
+                    source.ConcurrentStreamLimitIsInferred,
+                PlayableChannelCount = source.PlayableChannelCount,
+                DrmOnlyChannelCount = source.DrmOnlyChannelCount,
+                UnavailableChannelCount = source.UnavailableChannelCount,
+                MaximumPlayableHeight = source.MaximumPlayableHeight,
                 PowerGuideHash = source.PowerGuideHash,
             };
+        }
+
+        private static int? ReadConcurrentStreamLimit(
+            JsonElement session,
+            JsonElement account,
+            JsonElement nonlive)
+        {
+            var candidates = new[] { session, account, nonlive };
+            var names = new[]
+            {
+                "max_concurrent_streams",
+                "concurrent_stream_limit",
+                "streaming_number_limit",
+            };
+            foreach (var candidate in candidates)
+            {
+                if (candidate.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                foreach (var name in names)
+                {
+                    var value = ReadNullableInt32(candidate, name);
+                    if (value > 0)
+                    {
+                        return Math.Min(4, value.Value);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static int InferConcurrentStreamLimit(int recordingNumberLimit)
+        {
+            if (recordingNumberLimit >= 2000)
+            {
+                return 4;
+            }
+
+            return recordingNumberLimit > 0 ? 2 : 1;
         }
 
         private sealed class GuideEndpointSurveyDocument

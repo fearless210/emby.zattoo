@@ -35,7 +35,9 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 ImageUrl = channel.LogoUrl,
                 IsFavorite = channel.IsFavorite,
                 IsHD = channel.Qualities.Any(
-                    quality => quality.IsAvailable && quality.Height >= 720),
+                    quality => quality.IsAvailable
+                        && !quality.DrmRequired
+                        && quality.Height >= 720),
                 ChannelType = ChannelType.TV,
             };
         }

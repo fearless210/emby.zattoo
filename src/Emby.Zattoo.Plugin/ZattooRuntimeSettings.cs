@@ -17,16 +17,20 @@ namespace Emby.Zattoo.Plugin
         private ZattooRuntimeSettings(
             ZattooClientOptions clientOptions,
             ZattooPreferredQuality preferredQuality,
+            ZattooChannelImportMode channelImportMode,
             string ffmpegPath)
         {
             ClientOptions = clientOptions;
             PreferredQuality = preferredQuality;
+            ChannelImportMode = channelImportMode;
             FfmpegPath = ffmpegPath;
         }
 
         public ZattooClientOptions ClientOptions { get; }
 
         public ZattooPreferredQuality PreferredQuality { get; }
+
+        public ZattooChannelImportMode ChannelImportMode { get; }
 
         public string FfmpegPath { get; }
 
@@ -86,6 +90,7 @@ namespace Emby.Zattoo.Plugin
             return new ZattooRuntimeSettings(
                 options,
                 configuration.PreferredQuality,
+                configuration.ChannelImportMode,
                 string.IsNullOrWhiteSpace(configuration.FfmpegPath)
                     ? "ffmpeg"
                     : configuration.FfmpegPath.Trim());

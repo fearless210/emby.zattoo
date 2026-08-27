@@ -41,6 +41,10 @@ public sealed class ZattooClientChannelTests
                 Assert.Equal("https://logos.zattic.com/logos/rts2.png", second.LogoUrl);
                 Assert.Equal(2, second.Qualities.Count);
             });
+        Assert.Equal(2, client.SessionInfo?.PlayableChannelCount);
+        Assert.Equal(0, client.SessionInfo?.DrmOnlyChannelCount);
+        Assert.Equal(0, client.SessionInfo?.UnavailableChannelCount);
+        Assert.Equal(720, client.SessionInfo?.MaximumPlayableHeight);
         Assert.Equal(0, transport.PendingRequestCount);
     }
 

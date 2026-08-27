@@ -23,6 +23,7 @@ namespace Emby.Zattoo.Zattoo
         private readonly Dictionary<long, GuideCacheEntry> cache
             = new Dictionary<long, GuideCacheEntry>();
         private bool disposed;
+        private HashSet<string>? importedChannelIds;
 
         public ZattooGuideService(
             TimeSpan cacheDuration,
@@ -160,6 +161,45 @@ namespace Emby.Zattoo.Zattoo
             }
         }
 
+        public void SetImportedChannelIds(IReadOnlyCollection<string> channelIds)
+        {
+            ThrowIfDisposed();
+            if (channelIds == null)
+            {
+                throw new ArgumentNullException(nameof(channelIds));
+            }
+
+            var normalized = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var channelId in channelIds)
+            {
+                if (string.IsNullOrWhiteSpace(channelId))
+                {
+                    throw new ArgumentException(
+                        "Imported guide channel IDs cannot be empty.",
+                        nameof(channelIds));
+                }
+
+                normalized.Add(channelId.Trim());
+            }
+
+            var changed = false;
+            lock (cacheLock)
+            {
+                if (importedChannelIds == null
+                    || !importedChannelIds.SetEquals(normalized))
+                {
+                    importedChannelIds = normalized;
+                    cache.Clear();
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                detailsService?.RestrictToChannels(normalized);
+            }
+        }
+
         public void StopGuideEnrichment()
         {
             detailsService?.Stop();
@@ -245,7 +285,17 @@ namespace Emby.Zattoo.Zattoo
                         checked(windowStart + WindowSeconds),
                         cancellationToken)
                     .ConfigureAwait(false);
-                var window = ParseGuide(content);
+                HashSet<string>? channelFilter;
+                lock (cacheLock)
+                {
+                    channelFilter = importedChannelIds == null
+                        ? null
+                        : new HashSet<string>(
+                            importedChannelIds,
+                            StringComparer.Ordinal);
+                }
+
+                var window = ParseGuide(content, channelFilter);
                 lock (cacheLock)
                 {
                     cache[windowStart] = new GuideCacheEntry(
@@ -282,7 +332,9 @@ namespace Emby.Zattoo.Zattoo
             }
         }
 
-        private static GuideWindow ParseGuide(string content)
+        private static GuideWindow ParseGuide(
+            string content,
+            HashSet<string>? channelFilter = null)
         {
             JsonElement root;
             try
@@ -320,6 +372,12 @@ namespace Emby.Zattoo.Zattoo
             {
                 foreach (var channel in channels.EnumerateObject())
                 {
+                    if (channelFilter != null
+                        && !channelFilter.Contains(channel.Name))
+                    {
+                        continue;
+                    }
+
                     AddChannel(programsByChannel, channel.Name, channel.Value);
                 }
             }
@@ -333,10 +391,11 @@ namespace Emby.Zattoo.Zattoo
                         continue;
                     }
 
-                    AddChannel(
-                        programsByChannel,
-                        ReadString(channel, "cid"),
-                        programs);
+                    var channelId = ReadString(channel, "cid");
+                    if (channelFilter == null || channelFilter.Contains(channelId))
+                    {
+                        AddChannel(programsByChannel, channelId, programs);
+                    }
                 }
             }
 

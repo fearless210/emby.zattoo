@@ -23,6 +23,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
         private readonly string channelId;
         private readonly string channelName;
         private readonly IZattooClient client;
+        private readonly ZattooStreamCapacity streamCapacity;
         private readonly ZattooPreferredQuality preferredQuality;
         private readonly string ffmpegPath;
         private readonly string localApiUrl;
@@ -31,6 +32,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
         private Process? process;
         private CancellationTokenSource? streamCancellation;
         private Task? stderrMonitor;
+        private IDisposable? capacityLease;
         private int copyStarted;
         private int duplicateMoovWarnings;
         private bool closing;
@@ -40,6 +42,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
             string channelId,
             string channelName,
             IZattooClient client,
+            ZattooStreamCapacity streamCapacity,
             ZattooPreferredQuality preferredQuality,
             string ffmpegPath,
             string localApiUrl,
@@ -49,6 +52,8 @@ namespace Emby.Zattoo.Plugin.LiveTv
             this.channelId = channelId ?? throw new ArgumentNullException(nameof(channelId));
             this.channelName = channelName ?? string.Empty;
             this.client = client ?? throw new ArgumentNullException(nameof(client));
+            this.streamCapacity = streamCapacity
+                ?? throw new ArgumentNullException(nameof(streamCapacity));
             this.preferredQuality = preferredQuality;
             this.ffmpegPath = string.IsNullOrWhiteSpace(ffmpegPath) ? "ffmpeg" : ffmpegPath;
             this.localApiUrl = localApiUrl
@@ -86,65 +91,87 @@ namespace Emby.Zattoo.Plugin.LiveTv
                     return;
                 }
 
-                logger.Info("Opening Zattoo channel {0}.", channelName);
-                var stream = await client.GetStreamAsync(
-                        channelId,
-                        preferredQuality,
-                        ZattooStreamFormat.Hls,
-                        openCancellationToken)
-                    .ConfigureAwait(false);
-                var streamUrl = stream.Url;
-                if (!stream.IsSupported || string.IsNullOrWhiteSpace(streamUrl))
+                if (closing)
                 {
-                    throw new ZattooStreamUnavailableException(
-                        "Zattoo did not return a usable non-DRM HLS stream.");
+                    throw new InvalidOperationException(
+                        "This Zattoo live stream is already closing.");
                 }
 
-                var selection = await HlsManifestResolver.ResolveAsync(
-                        streamUrl!,
-                        stream.Height,
-                        openCancellationToken)
-                    .ConfigureAwait(false);
-                var startInfo = CreateProcessStartInfo(selection);
-                var newProcess = new Process
+                var acquiredLease = streamCapacity.TryAcquire();
+                if (acquiredLease == null)
                 {
-                    StartInfo = startInfo,
-                    EnableRaisingEvents = true,
-                };
+                    throw new ZattooStreamUnavailableException(
+                        "The Zattoo account concurrent stream capacity is already in use.");
+                }
 
                 try
                 {
-                    if (!newProcess.Start())
+                    logger.Info("Opening Zattoo channel {0}.", channelName);
+                    var stream = await client.GetStreamAsync(
+                            channelId,
+                            preferredQuality,
+                            ZattooStreamFormat.Hls,
+                            openCancellationToken)
+                        .ConfigureAwait(false);
+                    var streamUrl = stream.Url;
+                    if (!stream.IsSupported || string.IsNullOrWhiteSpace(streamUrl))
                     {
                         throw new ZattooStreamUnavailableException(
-                            "FFmpeg could not be started for the Zattoo live stream.");
+                            "Zattoo did not return a usable non-DRM HLS stream.");
                     }
-                }
-                catch (Win32Exception exception)
-                {
-                    newProcess.Dispose();
-                    throw new ZattooStreamUnavailableException(
-                        "FFmpeg could not be started. Configure its executable path in the Zattoo plugin settings.",
-                        exception);
-                }
 
-                var newStderrMonitor = MonitorStandardErrorAsync(newProcess);
-                if (newProcess.HasExited)
-                {
-                    await newStderrMonitor.ConfigureAwait(false);
-                    newProcess.Dispose();
-                    throw new ZattooStreamUnavailableException(
-                        "FFmpeg exited while opening the Zattoo live stream.");
-                }
+                    var selection = await HlsManifestResolver.ResolveAsync(
+                            streamUrl!,
+                            stream.Height,
+                            openCancellationToken)
+                        .ConfigureAwait(false);
+                    var startInfo = CreateProcessStartInfo(selection);
+                    var newProcess = new Process
+                    {
+                        StartInfo = startInfo,
+                        EnableRaisingEvents = true,
+                    };
 
-                streamCancellation = new CancellationTokenSource();
-                process = newProcess;
-                stderrMonitor = newStderrMonitor;
-                DateOpened = DateTimeOffset.UtcNow;
-                ZattooMediaSourceFactory.UseLocalLiveStreamEndpoint(
-                    MediaSource,
-                    localApiUrl,
-                    UniqueId);
+                    try
+                    {
+                        if (!newProcess.Start())
+                        {
+                            throw new ZattooStreamUnavailableException(
+                                "FFmpeg could not be started for the Zattoo live stream.");
+                        }
+                    }
+                    catch (Win32Exception exception)
+                    {
+                        newProcess.Dispose();
+                        throw new ZattooStreamUnavailableException(
+                            "FFmpeg could not be started. Configure its executable path in the Zattoo plugin settings.",
+                            exception);
+                    }
+
+                    var newStderrMonitor = MonitorStandardErrorAsync(newProcess);
+                    if (newProcess.HasExited)
+                    {
+                        await newStderrMonitor.ConfigureAwait(false);
+                        newProcess.Dispose();
+                        throw new ZattooStreamUnavailableException(
+                            "FFmpeg exited while opening the Zattoo live stream.");
+                    }
+
+                    streamCancellation = new CancellationTokenSource();
+                    process = newProcess;
+                    stderrMonitor = newStderrMonitor;
+                    capacityLease = acquiredLease;
+                    DateOpened = DateTimeOffset.UtcNow;
+                    ZattooMediaSourceFactory.UseLocalLiveStreamEndpoint(
+                        MediaSource,
+                        localApiUrl,
+                        UniqueId);
+                }
+                catch
+                {
+                    acquiredLease.Dispose();
+                    throw;
+                }
             }
             finally
             {
@@ -186,6 +213,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
             Process? processToClose;
             CancellationTokenSource? cancellationToDispose;
             Task? monitorToAwait;
+            IDisposable? leaseToRelease;
 
             await lifecycleLock.WaitAsync().ConfigureAwait(false);
             try
@@ -199,6 +227,8 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 processToClose = process;
                 cancellationToDispose = streamCancellation;
                 monitorToAwait = stderrMonitor;
+                leaseToRelease = capacityLease;
+                capacityLease = null;
                 cancellationToDispose?.Cancel();
             }
             finally
@@ -221,6 +251,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
             {
                 processToClose?.Dispose();
                 cancellationToDispose?.Dispose();
+                leaseToRelease?.Dispose();
                 logger.Info(
                     "Closed Zattoo channel {0}; duplicated MOOV warnings: {1}.",
                     channelName,

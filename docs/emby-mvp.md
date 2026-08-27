@@ -1,6 +1,6 @@
 # Emby MVP — installation et validation
 
-Le plugin 1.0.0 compile contre le SDK Emby stable 4.9.5.0
+Le plugin 1.1.0 compile contre le SDK Emby stable 4.9.5.0
 et `MediaBrowser.Server.Core` 4.9.1.90. Il inclut une page de configuration
 native Emby. Son chargement, sa configuration et l'import des chaînes ont été
 validés sur Emby Linux. La lecture de RTS 1 HD, l'arrêt, le changement de chaîne,
@@ -34,7 +34,7 @@ par `Close()`.
 - assembly `Zattoo Live TV` compilé contre l'API Emby 4.9 ;
 - page **Settings** générée nativement dans le tableau de bord Emby ;
 - mot de passe chiffré par `IEncryptionManager` et masqué côté navigateur ;
-- tuner `zattoo` avec un flux simultané par défaut ;
+- tuner `zattoo` dont la capacité est ajustée aux limites techniques du compte ;
 - chaînes TV, numéros, favoris et logos ;
 - identité stable fondée sur le `cid`, avec préfixe propre à la source TV Emby ;
 - qualité `Auto`, `1080p`, `720p` ou `540p` par environnement ;
@@ -100,6 +100,7 @@ Paramètres proposés :
 Zattoo username                obligatoire
 Zattoo password                obligatoire
 Preferred quality             Auto, 1080p, 720p ou 540p
+Channel import mode           Playable channels only recommandé
 FFmpeg executable             chemin Linux absolu recommandé
 Provider URL                  https://zattoo.com/ par défaut
 Zattoo web application version conserver la valeur proposée
@@ -110,8 +111,12 @@ rouverte, elle reçoit seulement `**********`, jamais le secret ni sa valeur
 chiffrée. Modifier les paramètres pendant une lecture n'interrompt pas le flux
 déjà ouvert ; la nouvelle configuration est utilisée à la demande suivante.
 
-Le tuner peut utiliser l'option Emby `Import favorites only`. Sa limite initiale
-est fixée à un stream simultané.
+Le tuner peut utiliser l'option Emby `Import favorites only`. Par défaut, seules
+les chaînes ayant une qualité disponible non-DRM sont importées et alimentent
+l'EPG. Sa capacité simultanée suit la limite détectée pour le compte afin de
+permettre, lorsque celle-ci est supérieure à un, une lecture pendant un
+enregistrement. Cette capacité n'ajoute aucune gestion multi-utilisateur au
+plugin.
 
 ## Valider l'EPG
 
@@ -192,7 +197,7 @@ Vérifier dans cet ordre :
 9. aucun password, cookie, token ou URL signée complète n'apparaît dans le log.
 
 Le GO / NO-GO n°2 ne sera prononcé qu'après lecture Emby Web, changements de
-chaîne et test longue durée. Samsung Tizen appartient au Milestone 4.
+chaîne et test longue durée.
 
 ## Limites connues
 

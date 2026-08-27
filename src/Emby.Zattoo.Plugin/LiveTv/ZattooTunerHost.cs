@@ -20,6 +20,8 @@ namespace Emby.Zattoo.Plugin.LiveTv
         private readonly object clientSync = new object();
         private readonly List<IZattooClient> retiredClients =
             new List<IZattooClient>();
+        private readonly ZattooStreamCapacity streamCapacity =
+            new ZattooStreamCapacity();
         private IZattooClient? client;
         private long clientConfigurationRevision = long.MinValue;
         private bool disposed;
@@ -82,16 +84,48 @@ namespace Emby.Zattoo.Plugin.LiveTv
             var context = RequireClient();
             var channels = await context.Client.GetChannelsAsync(cancellationToken)
                 .ConfigureAwait(false);
-            var selected = tuner.ImportFavoritesOnly
-                ? channels.Where(channel => channel.IsFavorite)
-                : channels;
+            var importable = ZattooChannelFilter.Apply(
+                channels,
+                context.Settings.ChannelImportMode);
+            var selected = (tuner.ImportFavoritesOnly
+                    ? importable.Where(channel => channel.IsFavorite)
+                    : importable)
+                .ToArray();
+            context.Client.SetImportedGuideChannels(
+                selected.Select(channel => channel.Id).ToArray());
+            var session = context.Client.SessionInfo;
+            var concurrentStreams = Math.Max(
+                1,
+                session?.MaximumConcurrentStreams ?? 1);
+            streamCapacity.UpdateLimit(concurrentStreams);
+            tuner.TunerCount = concurrentStreams;
             var channelIdPrefix = GetChannelIdPrefix(tuner);
             var result = selected
                 .Select(channel => ZattooChannelMapper.Map(
                     channel,
                     channelIdPrefix))
                 .ToList();
-            Logger.Info("Loaded {0} Zattoo channels.", result.Count);
+            Logger.Info(
+                "Loaded {0} of {1} Zattoo channels using {2} import mode.",
+                result.Count,
+                channels.Count,
+                context.Settings.ChannelImportMode);
+            if (session != null)
+            {
+                Logger.Info(
+                    "Zattoo account capabilities: {0} playable channel(s), {1} DRM-only, {2} unavailable, maximum non-DRM height {3}, replay {4}, cloud recording limit {5}, concurrent stream capacity {6} ({7}).",
+                    session.PlayableChannelCount,
+                    session.DrmOnlyChannelCount,
+                    session.UnavailableChannelCount,
+                    session.MaximumPlayableHeight?.ToString() ?? "unknown",
+                    session.ReplayAvailable ? "available" : "unavailable",
+                    session.RecordingNumberLimit,
+                    concurrentStreams,
+                    session.ConcurrentStreamLimitIsInferred
+                        ? "inferred from numerical account limits"
+                        : "reported by the provider");
+            }
+
             return result;
         }
 
@@ -125,6 +159,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 channelId,
                 tunerChannel.Name,
                 context.Client,
+                streamCapacity,
                 context.Settings.PreferredQuality,
                 context.Settings.FfmpegPath,
                 AppHost.GetLocalApiUrl("127.0.0.1"),
@@ -177,6 +212,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
                     settings.ClientOptions.GuideDetailsProgress =
                         LogGuideDetailsProgress;
                     var replacement = new ZattooClient(settings.ClientOptions);
+                    streamCapacity.UpdateLimit(1);
                     if (client != null)
                     {
                         client.StopGuideEnrichment();
