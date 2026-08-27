@@ -56,8 +56,21 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 ?? throw new ArgumentNullException(nameof(streamCapacity));
             this.preferredQuality = preferredQuality;
             this.ffmpegPath = string.IsNullOrWhiteSpace(ffmpegPath) ? "ffmpeg" : ffmpegPath;
-            this.localApiUrl = localApiUrl
-                ?? throw new ArgumentNullException(nameof(localApiUrl));
+            if (localApiUrl == null)
+            {
+                throw new ArgumentNullException(nameof(localApiUrl));
+            }
+
+            // Validated here so that Open cannot start FFmpeg and then fail while
+            // switching the media source to the local endpoint.
+            if (!ZattooMediaSourceFactory.IsSupportedLocalApiUrl(localApiUrl))
+            {
+                throw new ArgumentException(
+                    "A valid local Emby API URL is required.",
+                    nameof(localApiUrl));
+            }
+
+            this.localApiUrl = localApiUrl;
             this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
             UniqueId = Guid.NewGuid().ToString("N");
             MediaSource = ZattooMediaSourceFactory.Create(channelId, this.channelName);
@@ -104,6 +117,8 @@ namespace Emby.Zattoo.Plugin.LiveTv
                         "The Zattoo account concurrent stream capacity is already in use.");
                 }
 
+                Process? startedProcess = null;
+                Task? startedStderrMonitor = null;
                 try
                 {
                     logger.Info("Opening Zattoo channel {0}.", channelName);
@@ -136,6 +151,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
                     {
                         if (!newProcess.Start())
                         {
+                            newProcess.Dispose();
                             throw new ZattooStreamUnavailableException(
                                 "FFmpeg could not be started for the Zattoo live stream.");
                         }
@@ -148,18 +164,17 @@ namespace Emby.Zattoo.Plugin.LiveTv
                             exception);
                     }
 
-                    var newStderrMonitor = MonitorStandardErrorAsync(newProcess);
+                    startedProcess = newProcess;
+                    startedStderrMonitor = MonitorStandardErrorAsync(newProcess);
                     if (newProcess.HasExited)
                     {
-                        await newStderrMonitor.ConfigureAwait(false);
-                        newProcess.Dispose();
                         throw new ZattooStreamUnavailableException(
                             "FFmpeg exited while opening the Zattoo live stream.");
                     }
 
                     streamCancellation = new CancellationTokenSource();
                     process = newProcess;
-                    stderrMonitor = newStderrMonitor;
+                    stderrMonitor = startedStderrMonitor;
                     capacityLease = acquiredLease;
                     DateOpened = DateTimeOffset.UtcNow;
                     ZattooMediaSourceFactory.UseLocalLiveStreamEndpoint(
@@ -169,6 +184,29 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 }
                 catch
                 {
+                    // Nothing must survive a failed open: Emby never calls Close on
+                    // a live stream that did not open, so an already started FFmpeg
+                    // would keep pulling the Zattoo stream forever.
+                    process = null;
+                    stderrMonitor = null;
+                    capacityLease = null;
+                    var abandonedCancellation = streamCancellation;
+                    streamCancellation = null;
+                    abandonedCancellation?.Dispose();
+                    if (startedProcess != null)
+                    {
+                        logger.Warn(
+                            "Stopping FFmpeg because the Zattoo live stream for {0} failed to open.",
+                            channelName);
+                        await StopProcessAsync(startedProcess).ConfigureAwait(false);
+                        if (startedStderrMonitor != null)
+                        {
+                            await startedStderrMonitor.ConfigureAwait(false);
+                        }
+
+                        startedProcess.Dispose();
+                    }
+
                     acquiredLease.Dispose();
                     throw;
                 }

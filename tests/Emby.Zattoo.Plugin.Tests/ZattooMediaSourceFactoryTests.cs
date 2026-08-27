@@ -47,6 +47,38 @@ public sealed class ZattooMediaSourceFactoryTests
         Assert.DoesNotContain("zattoo://", source.Path, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("http://127.0.0.1:8096/")]
+    [InlineData("https://127.0.0.1:8920/")]
+    public void IsSupportedLocalApiUrl_AcceptsUrlsUseLocalLiveStreamEndpointAccepts(
+        string localApiUrl)
+    {
+        var source = ZattooMediaSourceFactory.Create("tsr1", "RTS 1 HD");
+
+        Assert.True(ZattooMediaSourceFactory.IsSupportedLocalApiUrl(localApiUrl));
+        ZattooMediaSourceFactory.UseLocalLiveStreamEndpoint(
+            source,
+            localApiUrl,
+            "stream-id");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("127.0.0.1:8096")]
+    [InlineData("file:///var/lib/emby")]
+    public void IsSupportedLocalApiUrl_RejectsUrlsUseLocalLiveStreamEndpointRejects(
+        string localApiUrl)
+    {
+        var source = ZattooMediaSourceFactory.Create("tsr1", "RTS 1 HD");
+
+        Assert.False(ZattooMediaSourceFactory.IsSupportedLocalApiUrl(localApiUrl));
+        Assert.Throws<ArgumentException>(() =>
+            ZattooMediaSourceFactory.UseLocalLiveStreamEndpoint(
+                source,
+                localApiUrl,
+                "stream-id"));
+    }
+
     [Fact]
     public void UseLocalLiveStreamEndpoint_RejectsNonHttpApiUrl()
     {

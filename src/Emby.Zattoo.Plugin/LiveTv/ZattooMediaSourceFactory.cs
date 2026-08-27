@@ -35,6 +35,18 @@ namespace Emby.Zattoo.Plugin.LiveTv
             };
         }
 
+        /// <summary>
+        /// Tells whether <see cref="UseLocalLiveStreamEndpoint"/> would accept this
+        /// URL. Callers validate it before starting anything a failed switch to the
+        /// local endpoint would leave behind.
+        /// </summary>
+        internal static bool IsSupportedLocalApiUrl(string localApiUrl)
+        {
+            return Uri.TryCreate(localApiUrl, UriKind.Absolute, out var baseUri)
+                && (baseUri.Scheme == Uri.UriSchemeHttp
+                    || baseUri.Scheme == Uri.UriSchemeHttps);
+        }
+
         internal static void UseLocalLiveStreamEndpoint(
             MediaSourceInfo source,
             string localApiUrl,
@@ -45,9 +57,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 throw new ArgumentNullException(nameof(source));
             }
 
-            if (!Uri.TryCreate(localApiUrl, UriKind.Absolute, out var baseUri)
-                || (baseUri.Scheme != Uri.UriSchemeHttp
-                    && baseUri.Scheme != Uri.UriSchemeHttps))
+            if (!IsSupportedLocalApiUrl(localApiUrl))
             {
                 throw new ArgumentException(
                     "A valid local Emby API URL is required.",
