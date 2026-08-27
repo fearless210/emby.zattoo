@@ -8,6 +8,10 @@ dupliquée ici.
 
 ### Corrigé
 
+- échec de lecture `HTTP 500` sur le point d'accès Live Stream lorsqu'Emby se
+  rattachait au flux, notamment quand la détection des pistes précède un
+  transcodage : les consommateurs sont désormais servis l'un après l'autre sur
+  le même remux, avec une attente courte pour absorber leur recouvrement ;
 - lecture des chaînes dont toutes les qualités non-DRM dépassent le plafond de
   qualité choisi : la préférence agit comme un plafond de débit et non comme une
   condition de lecture, avec repli sur la qualité disponible la plus basse ;
@@ -27,8 +31,15 @@ dupliquée ici.
 - gel du tuner pendant l'arrêt de l'enrichissement du guide : cet arrêt, qui
   attend le worker, ne se produit plus en tenant le verrou du client.
 
+### Optimisé
+
+- journalisation de la cause réelle d'un échec de copie du flux, qu'Emby ne
+  rapporte au client que sous la forme d'un `HTTP 500`.
+
 ### Tests
 
+- prise de relais entre consommateurs successifs, refus d'un consommateur
+  concurrent après l'attente, et respect de l'annulation ;
 - repli de qualité lorsqu'aucun niveau ne tient sous le plafond, et priorité
   conservée pour un niveau de résolution inconnue ;
 - chargement du catalogue avec des favoris en erreur HTTP, en réponse malformée

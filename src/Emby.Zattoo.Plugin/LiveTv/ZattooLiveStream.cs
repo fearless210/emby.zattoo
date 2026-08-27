@@ -20,6 +20,9 @@ namespace Emby.Zattoo.Plugin.LiveTv
     /// <summary>Owns one server-side FFmpeg remux from Zattoo HLS7 to MPEG-TS.</summary>
     internal sealed class ZattooLiveStream : ILiveStream
     {
+        private static readonly TimeSpan ConsumerHandoverTimeout =
+            TimeSpan.FromSeconds(5);
+
         private readonly string channelId;
         private readonly string channelName;
         private readonly IZattooClient client;
@@ -29,11 +32,12 @@ namespace Emby.Zattoo.Plugin.LiveTv
         private readonly string localApiUrl;
         private readonly ILogger logger;
         private readonly SemaphoreSlim lifecycleLock = new SemaphoreSlim(1, 1);
+        private readonly ZattooStreamConsumerGate consumerGate =
+            new ZattooStreamConsumerGate();
         private Process? process;
         private CancellationTokenSource? streamCancellation;
         private Task? stderrMonitor;
         private IDisposable? capacityLease;
-        private int copyStarted;
         private int duplicateMoovWarnings;
         private bool closing;
 
@@ -301,39 +305,62 @@ namespace Emby.Zattoo.Plugin.LiveTv
             Stream writer,
             CancellationToken cancellationToken)
         {
-            if (Interlocked.CompareExchange(ref copyStarted, 1, 0) != 0)
+            // Emby attaches more than once to the same live stream, for instance
+            // when media detection runs before a transcode. Consumers are served
+            // one after another from the same pipe: a new one resumes at the
+            // current position, which is what live television means anyway.
+            if (!await consumerGate.TryEnterAsync(
+                    ConsumerHandoverTimeout,
+                    cancellationToken).ConfigureAwait(false))
             {
                 throw new InvalidOperationException(
                     "This Zattoo live stream already has an active consumer.");
             }
 
-            var currentProcess = process
-                ?? throw new InvalidOperationException("The Zattoo live stream is not open.");
-            var currentCancellation = streamCancellation
-                ?? throw new InvalidOperationException("The Zattoo live stream is not open.");
-            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                currentCancellation.Token))
+            try
             {
-                try
+                var currentProcess = process
+                    ?? throw new InvalidOperationException("The Zattoo live stream is not open.");
+                var currentCancellation = streamCancellation
+                    ?? throw new InvalidOperationException("The Zattoo live stream is not open.");
+                using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    currentCancellation.Token))
                 {
-                    await currentProcess.StandardOutput.BaseStream.CopyToAsync(
-                            writer,
-                            81920,
-                            linked.Token)
-                        .ConfigureAwait(false);
+                    try
+                    {
+                        await currentProcess.StandardOutput.BaseStream.CopyToAsync(
+                                writer,
+                                81920,
+                                linked.Token)
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (
+                        currentCancellation.IsCancellationRequested
+                        && !cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
                 }
-                catch (OperationCanceledException) when (
-                    currentCancellation.IsCancellationRequested
-                    && !cancellationToken.IsCancellationRequested)
+
+                if (!closing && currentProcess.HasExited && currentProcess.ExitCode != 0)
                 {
-                    return;
+                    throw new IOException("FFmpeg stopped unexpectedly while remuxing Zattoo Live TV.");
                 }
             }
-
-            if (!closing && currentProcess.HasExited && currentProcess.ExitCode != 0)
+            catch (Exception exception) when (!(exception is OperationCanceledException))
             {
-                throw new IOException("FFmpeg stopped unexpectedly while remuxing Zattoo Live TV.");
+                // Emby only reports HTTP 500 to the client for this endpoint, so the
+                // reason has to reach the server log from here.
+                logger.ErrorException(
+                    "Zattoo live stream copy failed for channel {0}.",
+                    exception,
+                    channelName);
+                throw;
+            }
+            finally
+            {
+                consumerGate.Exit();
             }
         }
 
