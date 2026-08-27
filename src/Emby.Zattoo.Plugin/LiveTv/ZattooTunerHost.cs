@@ -18,9 +18,12 @@ namespace Emby.Zattoo.Plugin.LiveTv
     /// <summary>Live TV tuner backed by one Zattoo account.</summary>
     public sealed class ZattooTunerHost : BaseTunerHost, IDisposable
     {
+        private static readonly TimeSpan RetiredClientGracePeriod =
+            TimeSpan.FromMinutes(5);
+
         private readonly object clientSync = new object();
-        private readonly List<IZattooClient> retiredClients =
-            new List<IZattooClient>();
+        private readonly ZattooRetiredClientQueue retiredClients =
+            new ZattooRetiredClientQueue(RetiredClientGracePeriod);
         private readonly ZattooStreamCapacity streamCapacity =
             new ZattooStreamCapacity();
         private IZattooClient? client;
@@ -185,7 +188,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
 
         public void Dispose()
         {
-            List<IZattooClient> clientsToDispose;
+            var clientsToDispose = new List<IZattooClient>();
             lock (clientSync)
             {
                 if (disposed)
@@ -194,24 +197,21 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 }
 
                 disposed = true;
-                clientsToDispose = new List<IZattooClient>(retiredClients);
                 if (client != null)
                 {
                     clientsToDispose.Add(client);
                     client = null;
                 }
-
-                retiredClients.Clear();
             }
 
-            foreach (var clientToDispose in clientsToDispose)
-            {
-                clientToDispose.Dispose();
-            }
+            clientsToDispose.AddRange(retiredClients.TakeAll());
+            DisposeClients(clientsToDispose);
         }
 
         private ClientContext RequireClient()
         {
+            ClientContext context;
+            IZattooClient? clientToRetire = null;
             lock (clientSync)
             {
                 if (disposed)
@@ -228,19 +228,47 @@ namespace Emby.Zattoo.Plugin.LiveTv
                     settings.ClientOptions.GuideDetailsProgress =
                         LogGuideDetailsProgress;
                     var replacement = new ZattooClient(settings.ClientOptions);
-                    streamCapacity.UpdateLimit(1);
-                    if (client != null)
-                    {
-                        client.StopGuideEnrichment();
-                        retiredClients.Add(client);
-                    }
 
+                    // The stream capacity keeps the limit detected for the previous
+                    // session until the next channel refresh publishes a new one.
+                    // Resetting it here would refuse a legitimate second stream
+                    // while a recording is running.
+                    clientToRetire = client;
                     client = replacement;
                     clientConfigurationRevision = revision;
                     Logger.Info("Zattoo client configuration activated.");
                 }
 
-                return new ClientContext(client, settings);
+                context = new ClientContext(client, settings);
+            }
+
+            if (clientToRetire != null)
+            {
+                // Stopping and disposing a client drains its enrichment worker, so
+                // neither happens while the client lock is held.
+                clientToRetire.StopGuideEnrichment();
+                retiredClients.Retire(clientToRetire, DateTimeOffset.UtcNow);
+            }
+
+            DisposeClients(retiredClients.TakeExpired(DateTimeOffset.UtcNow));
+            return context;
+        }
+
+        private void DisposeClients(IReadOnlyList<IZattooClient> clientsToDispose)
+        {
+            foreach (var clientToDispose in clientsToDispose)
+            {
+                try
+                {
+                    clientToDispose.Dispose();
+                }
+                catch (Exception exception)
+                {
+                    // A retired client must never fail the request that collected it.
+                    Logger.ErrorException(
+                        "Failed to dispose a retired Zattoo client.",
+                        exception);
+                }
             }
         }
 
