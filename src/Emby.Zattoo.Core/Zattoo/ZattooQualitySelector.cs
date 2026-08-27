@@ -36,11 +36,27 @@ namespace Emby.Zattoo.Zattoo
                 .Where(quality => quality.Height.HasValue && quality.Height.Value <= maximumHeight)
                 .OrderByDescending(quality => quality.Height)
                 .FirstOrDefault();
+            if (knownMatch != null)
+            {
+                return knownMatch;
+            }
 
             // Unknown provider levels cannot be compared safely with a numeric cap.
             // They are used only when no known level can satisfy the preference.
-            return knownMatch
-                ?? candidates.FirstOrDefault(quality => !quality.Height.HasValue);
+            var unknownLevel = candidates.FirstOrDefault(
+                quality => !quality.Height.HasValue);
+            if (unknownLevel != null)
+            {
+                return unknownLevel;
+            }
+
+            // Every remaining level is taller than the configured preference. The
+            // preference is a ceiling for bandwidth, not a playback requirement:
+            // keep the channel playable with its lowest available quality instead
+            // of reporting it as unavailable.
+            return candidates
+                .OrderBy(quality => quality.Height)
+                .First();
         }
 
         internal static int? InferHeight(string level)

@@ -31,6 +31,59 @@ public sealed class ZattooQualitySelectorTests
     }
 
     [Fact]
+    public void SelectBest_FallsBackToLowestQualityWhenEveryLevelExceedsPreference()
+    {
+        var qualities = new[]
+        {
+            new ZattooQuality
+            {
+                Level = "fhd",
+                Height = 1080,
+                IsAvailable = true,
+            },
+            new ZattooQuality
+            {
+                Level = "hd",
+                Height = 720,
+                IsAvailable = true,
+            },
+        };
+
+        var selected = ZattooQualitySelector.SelectBest(
+            qualities,
+            ZattooPreferredQuality.P540);
+
+        Assert.NotNull(selected);
+        Assert.Equal("hd", selected.Level);
+    }
+
+    [Fact]
+    public void SelectBest_PrefersUnknownLevelOverQualityAbovePreference()
+    {
+        var qualities = new[]
+        {
+            new ZattooQuality
+            {
+                Level = "fhd",
+                Height = 1080,
+                IsAvailable = true,
+            },
+            new ZattooQuality
+            {
+                Level = "provider-specific",
+                IsAvailable = true,
+            },
+        };
+
+        var selected = ZattooQualitySelector.SelectBest(
+            qualities,
+            ZattooPreferredQuality.P540);
+
+        Assert.NotNull(selected);
+        Assert.Equal("provider-specific", selected.Level);
+    }
+
+    [Fact]
     public void SelectBest_ReturnsNullWhenEveryAvailableQualityRequiresDrm()
     {
         var qualities = new[]
