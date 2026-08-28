@@ -41,6 +41,12 @@ if (!string.IsNullOrWhiteSpace(provider))
     options.ProviderBaseUri = providerUri;
 }
 
+var language = Environment.GetEnvironmentVariable("ZATTOO_LANGUAGE");
+if (!string.IsNullOrWhiteSpace(language))
+{
+    options.Language = language.Trim();
+}
+
 var applicationVersion = Environment.GetEnvironmentVariable("ZATTOO_APP_VERSION");
 if (!string.IsNullOrWhiteSpace(applicationVersion))
 {
@@ -670,6 +676,7 @@ static void PrintUsage()
 {
     Console.WriteLine("Zattoo.Spike commands:");
     Console.WriteLine("  fields-survey        Lists the fields the account receives, without any value.");
+    Console.WriteLine("                       Set ZATTOO_LANGUAGE to compare what a session language changes.");
     Console.WriteLine("  channels");
     Console.WriteLine("  survey");
     Console.WriteLine("  epg-survey [1-14 days]");

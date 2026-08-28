@@ -237,6 +237,24 @@ La réponse peut fournir `stream.url` ou `stream.watch_urls`. Comme la référen
 le prototype retient la première entrée `watch_urls` exploitable et lit son
 `maxrate`; `stream.url` sert de fallback.
 
+## Langue des métadonnées
+
+Le champ `lang` envoyé au `hello` ne pilote pas la langue des métadonnées. La
+commande `fields-survey` a été exécutée deux fois sur le même compte, une fois
+avec `lang=en` et une fois avec `lang=de` : le vocabulaire des catégories est
+resté identique et en français dans les deux cas — `Information`, `Séries`,
+`Documentaires`, `Divertissement`, `Enfants`, `Sport`, `Films` — avec les mêmes
+identifiants numériques 1 à 7.
+
+Zattoo localise donc d'après le compte et sa région, pas d'après le paramètre de
+session. Un réglage de langue dans le plugin n'aurait aucun effet observable et
+n'est volontairement pas proposé. La mesure reste reproductible en définissant
+`ZATTOO_LANGUAGE` avant la commande.
+
+La constatation porte sur les catégories et la classification d'âge, seuls
+champs dont l'inventaire collecte les valeurs. Les titres et descriptions n'ont
+pas été comparés, l'outil ne lisant jamais de contenu.
+
 ## Points encore inconnus
 
 - durée réelle des cookies et du `power_guide_hash` ;

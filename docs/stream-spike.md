@@ -4,6 +4,29 @@ Toutes les commandes lisent `ZATTOO_USERNAME` et `ZATTOO_PASSWORD` dans
 l'environnement. Elles n'affichent ni les identifiants, ni les cookies, ni les
 URLs signées.
 
+## 0. Inventaire des champs publiés
+
+```bash
+dotnet run --project src/Zattoo.Spike --configuration Release -- fields-survey
+```
+
+La commande interroge les réponses chaînes, favoris, guide et détails, puis
+liste les noms de champs, leur fréquence, la part de champs réellement remplis
+et les types JSON observés. Aucune valeur n'est collectée, à l'exception d'une
+liste restreinte de vocabulaires de catalogue — catégories, genres, niveaux de
+qualité, classification d'âge. Au-delà de soixante valeurs distinctes, le champ
+est déclaré comme n'étant pas un vocabulaire et sa collecte s'arrête, afin
+qu'une entrée mal classée ne puisse pas divulguer de contenu.
+
+La sortie est donc partageable telle quelle. Elle sert à construire une
+fonctionnalité sur ce que le compte reçoit réellement plutôt que sur le
+protocole reconstitué : c'est elle qui a révélé le numéro de chaîne officiel,
+l'identifiant de contenu utilisé pour l'enregistrement de séries et les
+identifiants de catégories.
+
+Définir `ZATTOO_LANGUAGE` avant la commande permet de comparer ce qu'une langue
+de session change réellement.
+
 ## 1. Inventaire sans URL de lecture
 
 ```powershell
