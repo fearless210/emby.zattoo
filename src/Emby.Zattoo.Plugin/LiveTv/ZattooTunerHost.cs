@@ -330,6 +330,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
         {
             ClientContext context;
             IZattooClient? clientToRetire = null;
+            var applyGuideDays = 0;
             lock (clientSync)
             {
                 if (disposed)
@@ -359,9 +360,15 @@ namespace Emby.Zattoo.Plugin.LiveTv
                     cachedSettings = settings;
                     clientConfigurationRevision = revision;
                     Logger.Info("Zattoo client configuration activated.");
+                    applyGuideDays = settings.GuideDays;
                 }
 
                 context = new ClientContext(client, cachedSettings);
+            }
+
+            if (applyGuideDays > 0)
+            {
+                ApplyGuideDays(applyGuideDays);
             }
 
             if (clientToRetire != null)
@@ -374,6 +381,36 @@ namespace Emby.Zattoo.Plugin.LiveTv
 
             DisposeClients(retiredClients.TakeExpired(DateTimeOffset.UtcNow));
             return context;
+        }
+
+        /// <summary>
+        /// Writes the guide depth into the Emby Live TV settings. Emby decides the
+        /// range it asks the provider for, so a plugin setting can only take
+        /// effect by changing that value. Nothing is written while the setting is
+        /// left at zero, and nothing is written when the value already matches.
+        /// </summary>
+        private void ApplyGuideDays(int guideDays)
+        {
+            try
+            {
+                var options = GetConfiguration();
+                if (options.GuideDays == guideDays)
+                {
+                    return;
+                }
+
+                options.GuideDays = guideDays;
+                Config.SaveConfiguration("livetv", options);
+                Logger.Info(
+                    "Emby guide depth set to {0} day(s) from the Zattoo plugin settings.",
+                    guideDays);
+            }
+            catch (Exception exception)
+            {
+                Logger.ErrorException(
+                    "The Emby guide depth could not be updated from the Zattoo plugin settings.",
+                    exception);
+            }
         }
 
         private void DisposeClients(IReadOnlyList<IZattooClient> clientsToDispose)

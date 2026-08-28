@@ -1,3 +1,4 @@
+using Emby.Web.GenericEdit.Validation;
 using Emby.Zattoo.Models;
 using Emby.Zattoo.Plugin.Configuration;
 
@@ -54,6 +55,43 @@ public sealed class ZattooRuntimeSettingsTests
 
         // Empty means "use the FFmpeg Emby runs", which only the tuner can resolve.
         Assert.Equal(string.Empty, settings.FfmpegPath);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(14)]
+    public void FromConfiguration_CarriesTheGuideDepthUnchanged(int guideDays)
+    {
+        var options = new ZattooPluginOptions
+        {
+            Username = "user@example.invalid",
+            Password = "encrypted-value-not-used-here",
+            GuideDays = guideDays,
+        };
+
+        var settings = ZattooRuntimeSettings.FromConfiguration(
+            options,
+            "decrypted-test-password");
+
+        Assert.Equal(guideDays, settings.GuideDays);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(15)]
+    public void Validate_RejectsAGuideDepthEmbyWouldNotAccept(int guideDays)
+    {
+        var options = new ZattooPluginOptions
+        {
+            Username = "user@example.invalid",
+            Password = "encrypted-value-not-used-here",
+            GuideDays = guideDays,
+        };
+
+        var failure = Assert.Throws<ValidationException>(() => options.ValidateOrThrow());
+
+        Assert.Contains("14", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

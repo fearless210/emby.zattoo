@@ -43,6 +43,13 @@ namespace Emby.Zattoo.Plugin.Configuration
             + "The native Emby guide refresh does not wait for this process.")]
         public bool EnableGuideDetails { get; set; } = true;
 
+        [DisplayName("Guide days")]
+        [Description(
+            "Number of days of guide data Emby downloads, from 1 to 14. Leave 0 "
+            + "to keep whatever is configured in the Emby Live TV settings, where "
+            + "Auto means seven days.")]
+        public int GuideDays { get; set; }
+
         [DisplayName("FFmpeg executable")]
         [Description(
             "Leave empty to use the FFmpeg that Emby itself runs, which is the "
@@ -83,6 +90,13 @@ namespace Emby.Zattoo.Plugin.Configuration
                 context.AddValidationError(
                     nameof(ApplicationVersion),
                     "The Zattoo web application version is required.");
+            }
+
+            if (GuideDays < 0 || GuideDays > 14)
+            {
+                context.AddValidationError(
+                    nameof(GuideDays),
+                    "Choose between 1 and 14 days, or 0 to leave the Emby setting alone.");
             }
 
             if (!Enum.IsDefined(typeof(ZattooPreferredQuality), PreferredQuality))

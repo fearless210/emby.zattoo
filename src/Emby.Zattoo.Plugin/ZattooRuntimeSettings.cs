@@ -18,12 +18,14 @@ namespace Emby.Zattoo.Plugin
             ZattooClientOptions clientOptions,
             ZattooPreferredQuality preferredQuality,
             ZattooChannelImportMode channelImportMode,
-            string ffmpegPath)
+            string ffmpegPath,
+            int guideDays)
         {
             ClientOptions = clientOptions;
             PreferredQuality = preferredQuality;
             ChannelImportMode = channelImportMode;
             FfmpegPath = ffmpegPath;
+            GuideDays = guideDays;
         }
 
         public ZattooClientOptions ClientOptions { get; }
@@ -33,6 +35,9 @@ namespace Emby.Zattoo.Plugin
         public ZattooChannelImportMode ChannelImportMode { get; }
 
         public string FfmpegPath { get; }
+
+        /// <summary>Gets the guide depth to impose on Emby, or 0 to leave it alone.</summary>
+        public int GuideDays { get; }
 
         public static ZattooRuntimeSettings FromConfiguration(
             ZattooPluginOptions configuration,
@@ -94,7 +99,8 @@ namespace Emby.Zattoo.Plugin
 
                 // An empty path is not a default: it asks the tuner to use the
                 // FFmpeg Emby runs. Resolving it here would hide that intent.
-                configuration.FfmpegPath?.Trim() ?? string.Empty);
+                configuration.FfmpegPath?.Trim() ?? string.Empty,
+                configuration.GuideDays);
         }
 
         private static string CreateCacheScope(
