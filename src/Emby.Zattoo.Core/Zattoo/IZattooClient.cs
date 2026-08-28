@@ -31,6 +31,9 @@ namespace Emby.Zattoo.Zattoo
             IReadOnlyCollection<string> programIds,
             CancellationToken cancellationToken = default);
 
+        Task<ZattooFieldInventory> SurveyFieldsAsync(
+            CancellationToken cancellationToken = default);
+
         Task<ZattooGuideEndpointComparison> CompareGuideEndpointsAsync(
             DateTimeOffset startTime,
             DateTimeOffset endTime,

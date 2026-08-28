@@ -309,6 +309,17 @@ namespace Emby.Zattoo.Zattoo
             IReadOnlyList<string> normalizedIds,
             CancellationToken cancellationToken)
         {
+            var content = await LoadProgramDetailsContentAsync(
+                    normalizedIds,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return ParseProgramDetails(content);
+        }
+
+        private async Task<string> LoadProgramDetailsContentAsync(
+            IReadOnlyList<string> normalizedIds,
+            CancellationToken cancellationToken)
+        {
             await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
             var response = await SendAuthenticatedWithRetryAsync(
                 token => transport.GetAsync(
@@ -316,7 +327,57 @@ namespace Emby.Zattoo.Zattoo
                     token),
                 "loading program details",
                 cancellationToken).ConfigureAwait(false);
-            return ParseProgramDetails(response.Content);
+            return response.Content;
+        }
+
+        /// <summary>
+        /// Reports which fields the account actually receives, so features can be
+        /// built on observed data instead of assumptions. No value is collected.
+        /// </summary>
+        public async Task<ZattooFieldInventory> SurveyFieldsAsync(
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+            await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
+            var sections = new List<ZattooFieldSection>();
+
+            var channelsResponse = await SendAuthenticatedWithRetryAsync(
+                token => transport.GetAsync(BuildChannelsPath(), token),
+                "loading channels for a field survey",
+                cancellationToken).ConfigureAwait(false);
+            sections.Add(ZattooFieldSurvey.Analyze("channels", channelsResponse.Content));
+
+            var favoritesResponse = await SendAuthenticatedWithRetryAsync(
+                token => transport.GetAsync(FavoritesPath, token),
+                "loading favorites for a field survey",
+                cancellationToken).ConfigureAwait(false);
+            sections.Add(ZattooFieldSurvey.Analyze("favorites", favoritesResponse.Content));
+
+            var windowStart = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var guideContent = await LoadGuideWindowContentAsync(
+                    windowStart,
+                    windowStart + (5 * 60 * 60),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            sections.Add(ZattooFieldSurvey.Analyze("guide", guideContent));
+
+            var programIds = ZattooGuideService.ParseProgramsForSurvey(guideContent)
+                .Select(program => program.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .Take(20)
+                .ToArray();
+            if (programIds.Length > 0)
+            {
+                var detailsContent = await LoadProgramDetailsContentAsync(
+                        programIds,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                sections.Add(
+                    ZattooFieldSurvey.Analyze("program details", detailsContent));
+            }
+
+            return new ZattooFieldInventory { Sections = sections };
         }
 
         public async Task<IReadOnlyList<ZattooStream>> GetStreamOptionsAsync(

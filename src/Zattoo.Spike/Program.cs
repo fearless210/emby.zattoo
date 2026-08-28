@@ -64,6 +64,7 @@ try
     {
         "channels" => await PrintChannelsAsync(client, cancellation.Token),
         "survey" => await PrintSurveyAsync(client, cancellation.Token),
+        "fields-survey" => await PrintFieldSurveyAsync(client, cancellation.Token),
         "epg-survey" => await PrintEpgSurveyAsync(client, args, cancellation.Token),
         "epg-endpoint-survey" => await PrintEpgEndpointSurveyAsync(
             client,
@@ -121,6 +122,54 @@ static async Task<int> PrintChannelsAsync(
         Console.WriteLine($"{channel.Number:D3} | {channel.Name} | {channel.Id}{favorite}");
     }
 
+    return 0;
+}
+
+static async Task<int> PrintFieldSurveyAsync(
+    IZattooClient client,
+    CancellationToken cancellationToken)
+{
+    var inventory = await client.SurveyFieldsAsync(cancellationToken);
+
+    Console.WriteLine("Zattoo field survey (names and counts only, never a value)");
+    foreach (var section in inventory.Sections)
+    {
+        Console.WriteLine();
+        Console.WriteLine(
+            $"== {section.Name} ({section.DocumentBytes} bytes, {section.Fields.Count} fields)");
+        Console.WriteLine($"{"field",-52} {"seen",6} {"filled",7}  kinds");
+        foreach (var field in section.Fields)
+        {
+            Console.WriteLine(
+                $"{field.Path,-52} {field.Occurrences,6} {field.PopulatedOccurrences,7}  {field.ValueKinds}");
+        }
+
+        if (section.Vocabularies.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"-- {section.Name}: vocabularies");
+            foreach (var vocabulary in section.Vocabularies)
+            {
+                if (vocabulary.Truncated)
+                {
+                    Console.WriteLine(
+                        $"{vocabulary.Path}: too many distinct values, not a vocabulary");
+                    continue;
+                }
+
+                Console.WriteLine(
+                    $"{vocabulary.Path}: "
+                    + string.Join(
+                        ", ",
+                        vocabulary.Values.Select(value =>
+                            $"{value.Value} ({value.Occurrences})")));
+            }
+        }
+    }
+
+    Console.WriteLine();
+    Console.WriteLine(
+        "Only field names, counters and catalogue vocabularies were read.");
     return 0;
 }
 
@@ -620,6 +669,7 @@ static int PrintUnknownCommand()
 static void PrintUsage()
 {
     Console.WriteLine("Zattoo.Spike commands:");
+    Console.WriteLine("  fields-survey        Lists the fields the account receives, without any value.");
     Console.WriteLine("  channels");
     Console.WriteLine("  survey");
     Console.WriteLine("  epg-survey [1-14 days]");

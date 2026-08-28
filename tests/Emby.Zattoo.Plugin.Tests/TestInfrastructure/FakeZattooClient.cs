@@ -43,6 +43,10 @@ internal sealed class FakeZattooClient : IZattooClient
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
+    public Task<ZattooFieldInventory> SurveyFieldsAsync(
+        CancellationToken cancellationToken = default) =>
+        throw new NotImplementedException();
+
     public Task<ZattooGuideEndpointComparison> CompareGuideEndpointsAsync(
         DateTimeOffset startTime,
         DateTimeOffset endTime,
