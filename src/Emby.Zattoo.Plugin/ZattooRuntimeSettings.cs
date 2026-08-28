@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -19,8 +20,10 @@ namespace Emby.Zattoo.Plugin
             ZattooPreferredQuality preferredQuality,
             ZattooChannelImportMode channelImportMode,
             string ffmpegPath,
-            int guideDays)
+            int guideDays,
+            IReadOnlyList<string> channelGroups)
         {
+            ChannelGroups = channelGroups;
             ClientOptions = clientOptions;
             PreferredQuality = preferredQuality;
             ChannelImportMode = channelImportMode;
@@ -38,6 +41,9 @@ namespace Emby.Zattoo.Plugin
 
         /// <summary>Gets the guide depth to impose on Emby, or 0 to leave it alone.</summary>
         public int GuideDays { get; }
+
+        /// <summary>Gets the provider groups to import, empty for all of them.</summary>
+        public IReadOnlyList<string> ChannelGroups { get; }
 
         public static ZattooRuntimeSettings FromConfiguration(
             ZattooPluginOptions configuration,
@@ -100,7 +106,28 @@ namespace Emby.Zattoo.Plugin
                 // An empty path is not a default: it asks the tuner to use the
                 // FFmpeg Emby runs. Resolving it here would hide that intent.
                 configuration.FfmpegPath?.Trim() ?? string.Empty,
-                configuration.GuideDays);
+                configuration.GuideDays,
+                SplitChannelGroups(configuration.ChannelGroups));
+        }
+
+        private static IReadOnlyList<string> SplitChannelGroups(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return Array.Empty<string>();
+            }
+
+            var groups = new List<string>();
+            foreach (var group in value.Split(','))
+            {
+                var normalized = group.Trim();
+                if (normalized.Length > 0)
+                {
+                    groups.Add(normalized);
+                }
+            }
+
+            return groups;
         }
 
         private static string CreateCacheScope(

@@ -16,6 +16,15 @@ namespace Emby.Zattoo.Models
 
         public bool IsFavorite { get; set; }
 
+        /// <summary>
+        /// Gets or sets the provider group this channel belongs to, empty when the
+        /// catalogue publishes none.
+        /// </summary>
+        public string GroupName { get; set; } = string.Empty;
+
+        /// <summary>Gets or sets whether the provider publishes a radio channel.</summary>
+        public bool IsRadio { get; set; }
+
         public IReadOnlyList<ZattooQuality> Qualities { get; set; }
             = Array.Empty<ZattooQuality>();
     }

@@ -1147,6 +1147,8 @@ namespace Emby.Zattoo.Zattoo
                 throw new ZattooProtocolException("The Zattoo channels response is invalid.");
             }
 
+            var groupNames = ParseGroupNames(root);
+
             var result = new List<ZattooChannel>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var channelElement in channelsElement.EnumerateArray())
@@ -1175,11 +1177,46 @@ namespace Emby.Zattoo.Zattoo
                     Number = number > 0 ? number.Value : result.Count + 1,
                     LogoUrl = BuildLogoUrl(logoPath),
                     IsFavorite = favorites.Contains(id),
+                    GroupName = ReadGroupName(channelElement, groupNames),
+                    IsRadio = ReadBoolean(channelElement, "is_radio"),
                     Qualities = ParseQualities(channelElement),
                 });
             }
 
             return result;
+        }
+
+        private static IReadOnlyList<string> ParseGroupNames(JsonElement root)
+        {
+            if (!root.TryGetProperty("groups", out var groups)
+                || groups.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<string>();
+            }
+
+            var names = new List<string>();
+            foreach (var group in groups.EnumerateArray())
+            {
+                names.Add(
+                    group.ValueKind == JsonValueKind.Object
+                        ? ReadString(group, "name")
+                        : string.Empty);
+            }
+
+            return names;
+        }
+
+        private static string ReadGroupName(
+            JsonElement channel,
+            IReadOnlyList<string> groupNames)
+        {
+            var index = ReadNullableInt32(channel, "group_index");
+            if (index == null || index < 0 || index >= groupNames.Count)
+            {
+                return string.Empty;
+            }
+
+            return groupNames[index.Value];
         }
 
         private static IReadOnlyList<ZattooQuality> ParseQualities(JsonElement channel)

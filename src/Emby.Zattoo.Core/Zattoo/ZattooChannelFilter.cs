@@ -24,6 +24,62 @@ namespace Emby.Zattoo.Zattoo
             return channels.Where(channel => ShouldImport(channel, mode)).ToArray();
         }
 
+        /// <summary>
+        /// Keeps only the channels of the named groups. An empty selection keeps
+        /// everything, and a name the catalogue does not publish simply matches
+        /// nothing rather than failing the import.
+        /// </summary>
+        public static IReadOnlyList<ZattooChannel> ApplyGroups(
+            IEnumerable<ZattooChannel> channels,
+            IReadOnlyCollection<string> groupNames)
+        {
+            if (channels == null)
+            {
+                throw new ArgumentNullException(nameof(channels));
+            }
+
+            if (groupNames == null)
+            {
+                throw new ArgumentNullException(nameof(groupNames));
+            }
+
+            var selected = new HashSet<string>(
+                groupNames.Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Select(name => name.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            if (selected.Count == 0)
+            {
+                return channels.ToArray();
+            }
+
+            return channels
+                .Where(channel => selected.Contains(channel.GroupName))
+                .ToArray();
+        }
+
+        /// <summary>Lists the groups the catalogue publishes, in catalogue order.</summary>
+        public static IReadOnlyList<string> ListGroups(
+            IEnumerable<ZattooChannel> channels)
+        {
+            if (channels == null)
+            {
+                throw new ArgumentNullException(nameof(channels));
+            }
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var names = new List<string>();
+            foreach (var channel in channels)
+            {
+                if (!string.IsNullOrWhiteSpace(channel.GroupName)
+                    && seen.Add(channel.GroupName))
+                {
+                    names.Add(channel.GroupName);
+                }
+            }
+
+            return names;
+        }
+
         public static bool IsPlayable(ZattooChannel channel)
         {
             if (channel == null)

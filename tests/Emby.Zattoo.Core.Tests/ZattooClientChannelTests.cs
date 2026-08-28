@@ -50,6 +50,42 @@ public sealed class ZattooClientChannelTests
     }
 
     [Fact]
+    public async Task GetChannelsAsync_ResolvesTheGroupNameAndRadioFlag()
+    {
+        var transport = new FakeZattooTransport();
+        ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/channels/favorites",
+            HttpStatusCode.OK,
+            Fixture.Read("favorites.json"));
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/v3/cached/fixture-guide-hash/channels",
+            HttpStatusCode.OK,
+            "{\"groups\":[{\"name\":\"Suisse\"},{\"name\":\"Radio\"}],\"channels\":["
+                + "{\"cid\":\"ch-a\",\"group_index\":0,\"is_radio\":false,"
+                + "\"qualities\":[{\"availability\":\"available\",\"level\":\"hd\",\"title\":\"A\"}]},"
+                + "{\"cid\":\"ch-b\",\"group_index\":1,\"is_radio\":true,"
+                + "\"qualities\":[{\"availability\":\"available\",\"level\":\"sd\",\"title\":\"B\"}]},"
+                + "{\"cid\":\"ch-c\",\"group_index\":9,"
+                + "\"qualities\":[{\"availability\":\"available\",\"level\":\"sd\",\"title\":\"C\"}]}"
+                + "]}");
+
+        using var client = ZattooClientAuthenticationTests.CreateClient(transport);
+        var channels = await client.GetChannelsAsync();
+
+        Assert.Equal("Suisse", channels[0].GroupName);
+        Assert.False(channels[0].IsRadio);
+        Assert.Equal("Radio", channels[1].GroupName);
+        Assert.True(channels[1].IsRadio);
+
+        // An index outside the published groups leaves the channel ungrouped
+        // rather than borrowing someone else's name.
+        Assert.Equal(string.Empty, channels[2].GroupName);
+    }
+
+    [Fact]
     public async Task GetChannelsAsync_UsesTheChannelNumberPublishedByTheProvider()
     {
         var transport = new FakeZattooTransport();

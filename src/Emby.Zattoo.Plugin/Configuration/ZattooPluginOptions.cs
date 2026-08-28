@@ -43,6 +43,13 @@ namespace Emby.Zattoo.Plugin.Configuration
             + "The native Emby guide refresh does not wait for this process.")]
         public bool EnableGuideDetails { get; set; } = true;
 
+        [DisplayName("Channel groups")]
+        [Description(
+            "Comma separated list of the provider groups to import. Leave empty "
+            + "to import every group. The groups your account publishes are "
+            + "listed in the server log after each channel refresh.")]
+        public string ChannelGroups { get; set; } = string.Empty;
+
         [DisplayName("Guide days")]
         [Description(
             "Number of days of guide data Emby downloads, from 1 to 14. Leave 0 "

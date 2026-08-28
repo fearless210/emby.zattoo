@@ -130,9 +130,19 @@ namespace Emby.Zattoo.Plugin.LiveTv
                     "Zattoo did not return the channel favorites; every channel is imported as non-favorite.");
             }
 
-            var importable = ZattooChannelFilter.Apply(
-                channels,
-                context.Settings.ChannelImportMode);
+            var groups = ZattooChannelFilter.ListGroups(channels);
+            if (groups.Count > 0)
+            {
+                Logger.Info(
+                    "Zattoo channel groups available: {0}.",
+                    string.Join(", ", groups));
+            }
+
+            var importable = ZattooChannelFilter.ApplyGroups(
+                ZattooChannelFilter.Apply(
+                    channels,
+                    context.Settings.ChannelImportMode),
+                context.Settings.ChannelGroups);
             var selected = (tuner.ImportFavoritesOnly
                     ? importable.Where(channel => channel.IsFavorite)
                     : importable)
