@@ -10,6 +10,7 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
+using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.LiveTv;
 
@@ -27,6 +28,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
         private readonly ZattooStreamCapacity streamCapacity =
             new ZattooStreamCapacity();
         private readonly SemaphoreSlim catalogueLock = new SemaphoreSlim(1, 1);
+        private readonly IFfmpegManager? ffmpegManager;
         private IZattooClient? client;
         private IZattooClient? catalogueLoadedFor;
         private ZattooRuntimeSettings? cachedSettings;
@@ -36,6 +38,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
         public ZattooTunerHost(IServerApplicationHost applicationHost)
             : base(applicationHost)
         {
+            ffmpegManager = applicationHost.Resolve<IFfmpegManager>();
             Logger.Info("Zattoo tuner initialized; account settings are managed by the plugin page.");
         }
 
@@ -216,6 +219,40 @@ namespace Emby.Zattoo.Plugin.LiveTv
             }
         }
 
+        /// <summary>
+        /// Returns the configured FFmpeg, or the one Emby runs itself. Emby always
+        /// knows where its own binary is, including inside a container, which is
+        /// more reliable than a path typed by hand or a PATH lookup.
+        /// </summary>
+        private string ResolveFfmpegPath(string configuredPath)
+        {
+            if (!string.IsNullOrWhiteSpace(configuredPath))
+            {
+                return configuredPath;
+            }
+
+            string? encoderPath = null;
+            try
+            {
+                encoderPath = ffmpegManager?.FfmpegConfiguration?.EncoderPath;
+            }
+            catch (Exception exception)
+            {
+                Logger.ErrorException(
+                    "The FFmpeg path used by Emby could not be read; falling back to the system path.",
+                    exception);
+            }
+
+            if (string.IsNullOrWhiteSpace(encoderPath))
+            {
+                Logger.Warn(
+                    "Emby did not report an FFmpeg path; falling back to 'ffmpeg' from the system path.");
+                return "ffmpeg";
+            }
+
+            return encoderPath!;
+        }
+
         private bool IsCatalogueLoaded(IZattooClient current)
         {
             lock (clientSync)
@@ -261,7 +298,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 context.Client,
                 streamCapacity,
                 context.Settings.PreferredQuality,
-                context.Settings.FfmpegPath,
+                ResolveFfmpegPath(context.Settings.FfmpegPath),
                 AppHost.GetLocalApiUrl("127.0.0.1"),
                 Logger);
             return stream;

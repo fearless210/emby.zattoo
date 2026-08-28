@@ -91,9 +91,10 @@ namespace Emby.Zattoo.Plugin
                 options,
                 configuration.PreferredQuality,
                 configuration.ChannelImportMode,
-                string.IsNullOrWhiteSpace(configuration.FfmpegPath)
-                    ? "ffmpeg"
-                    : configuration.FfmpegPath.Trim());
+
+                // An empty path is not a default: it asks the tuner to use the
+                // FFmpeg Emby runs. Resolving it here would hide that intent.
+                configuration.FfmpegPath?.Trim() ?? string.Empty);
         }
 
         private static string CreateCacheScope(

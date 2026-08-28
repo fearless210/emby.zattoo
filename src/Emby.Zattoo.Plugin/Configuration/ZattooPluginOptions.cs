@@ -44,9 +44,11 @@ namespace Emby.Zattoo.Plugin.Configuration
         public bool EnableGuideDetails { get; set; } = true;
 
         [DisplayName("FFmpeg executable")]
-        [Description("Absolute Linux path to ffmpeg, or 'ffmpeg' when it is available in Emby's PATH.")]
+        [Description(
+            "Leave empty to use the FFmpeg that Emby itself runs, which is the "
+            + "recommended setting. Set an absolute path only to override it.")]
         [EditFilePicker]
-        public string FfmpegPath { get; set; } = "ffmpeg";
+        public string FfmpegPath { get; set; } = string.Empty;
 
         [DisplayName("Provider URL")]
         [Description("Keep the default for Zattoo. Resellers must use an absolute HTTPS URL.")]

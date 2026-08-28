@@ -39,6 +39,24 @@ public sealed class ZattooRuntimeSettingsTests
     }
 
     [Fact]
+    public void FromConfiguration_KeepsAnEmptyFfmpegPathForTheTunerToResolve()
+    {
+        var options = new ZattooPluginOptions
+        {
+            Username = "user@example.invalid",
+            Password = "encrypted-value-not-used-here",
+            FfmpegPath = "   ",
+        };
+
+        var settings = ZattooRuntimeSettings.FromConfiguration(
+            options,
+            "decrypted-test-password");
+
+        // Empty means "use the FFmpeg Emby runs", which only the tuner can resolve.
+        Assert.Equal(string.Empty, settings.FfmpegPath);
+    }
+
+    [Fact]
     public void FromConfiguration_ScopesPersistentGuideCacheWithoutAccountName()
     {
         var options = new ZattooPluginOptions
