@@ -50,6 +50,48 @@ public sealed class ZattooClientChannelTests
     }
 
     [Fact]
+    public async Task GetChannelsAsync_UsesTheChannelNumberPublishedByTheProvider()
+    {
+        var transport = new FakeZattooTransport();
+        ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/channels/favorites",
+            HttpStatusCode.OK,
+            Fixture.Read("favorites.json"));
+        transport.Enqueue(
+            HttpMethod.Get,
+            "/zapi/v3/cached/fixture-guide-hash/channels",
+            HttpStatusCode.OK,
+            "{\"channels\":["
+                + "{\"cid\":\"ch-a\",\"number\":41,\"qualities\":[{\"availability\":\"available\",\"level\":\"hd\",\"title\":\"A\"}]},"
+                + "{\"cid\":\"ch-b\",\"number\":7,\"qualities\":[{\"availability\":\"available\",\"level\":\"hd\",\"title\":\"B\"}]}"
+                + "]}");
+
+        using var client = ZattooClientAuthenticationTests.CreateClient(transport);
+        var channels = await client.GetChannelsAsync();
+
+        // The provider number wins over the catalogue position, so adding or
+        // removing a channel cannot renumber the ones that follow it.
+        Assert.Equal(41, channels[0].Number);
+        Assert.Equal(7, channels[1].Number);
+    }
+
+    [Fact]
+    public async Task GetChannelsAsync_NumbersByPositionWhenTheProviderPublishesNone()
+    {
+        var transport = new FakeZattooTransport();
+        ZattooClientAuthenticationTests.QueueAuthenticatedSession(transport);
+        QueueChannels(transport);
+
+        using var client = ZattooClientAuthenticationTests.CreateClient(transport);
+        var channels = await client.GetChannelsAsync();
+
+        Assert.Equal(1, channels[0].Number);
+        Assert.Equal(2, channels[1].Number);
+    }
+
+    [Fact]
     public async Task GetChannelsAsync_LoadsCatalogueWhenFavoritesRequestFails()
     {
         var transport = new FakeZattooTransport();

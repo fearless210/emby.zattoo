@@ -1161,11 +1161,16 @@ namespace Emby.Zattoo.Zattoo
                 }
 
                 ReadChannelPresentation(channelElement, out var name, out var logoPath);
+
+                // The provider publishes its own channel number. Falling back to
+                // the catalogue position would renumber every later channel as
+                // soon as one is added or removed.
+                var number = ReadNullableInt32(channelElement, "number");
                 result.Add(new ZattooChannel
                 {
                     Id = id,
                     Name = string.IsNullOrWhiteSpace(name) ? id : name,
-                    Number = result.Count + 1,
+                    Number = number > 0 ? number.Value : result.Count + 1,
                     LogoUrl = BuildLogoUrl(logoPath),
                     IsFavorite = favorites.Contains(id),
                     Qualities = ParseQualities(channelElement),
