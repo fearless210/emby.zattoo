@@ -38,7 +38,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
                     quality => quality.IsAvailable
                         && !quality.DrmRequired
                         && quality.Height >= 720),
-                ChannelType = ChannelType.TV,
+                ChannelType = channel.IsRadio ? ChannelType.Radio : ChannelType.TV,
             };
         }
     }

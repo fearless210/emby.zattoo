@@ -100,4 +100,24 @@ public sealed class ZattooChannelMapperTests
         Assert.Throws<ArgumentException>(() =>
             ZattooChannelMapper.Map(channel, string.Empty));
     }
+
+    [Fact]
+    public void Map_MarksARadioChannelAsRadio()
+    {
+        var info = ZattooChannelMapper.Map(
+            new ZattooChannel { Id = "ch-a", Name = "Radio A", IsRadio = true },
+            "tuner_");
+
+        Assert.Equal(ChannelType.Radio, info.ChannelType);
+    }
+
+    [Fact]
+    public void Map_KeepsTelevisionAsTheDefault()
+    {
+        var info = ZattooChannelMapper.Map(
+            new ZattooChannel { Id = "ch-a", Name = "Channel A" },
+            "tuner_");
+
+        Assert.Equal(ChannelType.TV, info.ChannelType);
+    }
 }
