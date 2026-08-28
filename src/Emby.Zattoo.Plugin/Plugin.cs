@@ -39,6 +39,13 @@ namespace Emby.Zattoo.Plugin
 
         public override Guid Id => PluginId;
 
+        /// <summary>
+        /// Gets the counter incremented on every save. Callers compare it before
+        /// asking for settings, which avoids decrypting the password on requests
+        /// that nothing has invalidated.
+        /// </summary>
+        internal long ConfigurationRevision => Interlocked.Read(ref configurationRevision);
+
         internal ZattooRuntimeSettings GetRuntimeSettings(out long revision)
         {
             var options = GetOptions();

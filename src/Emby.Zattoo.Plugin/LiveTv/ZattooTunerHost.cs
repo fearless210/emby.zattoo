@@ -26,7 +26,10 @@ namespace Emby.Zattoo.Plugin.LiveTv
             new ZattooRetiredClientQueue(RetiredClientGracePeriod);
         private readonly ZattooStreamCapacity streamCapacity =
             new ZattooStreamCapacity();
+        private readonly SemaphoreSlim catalogueLock = new SemaphoreSlim(1, 1);
         private IZattooClient? client;
+        private IZattooClient? catalogueLoadedFor;
+        private ZattooRuntimeSettings? cachedSettings;
         private long clientConfigurationRevision = long.MinValue;
         private bool disposed;
 
@@ -72,6 +75,8 @@ namespace Emby.Zattoo.Plugin.LiveTv
             CancellationToken cancellationToken)
         {
             var context = RequireClient();
+            await EnsureCatalogueAsync(context, tuner, cancellationToken)
+                .ConfigureAwait(false);
             var programs = await context.Client.GetProgramsAsync(
                     new[] { tunerChannelId },
                     startDateUtc,
@@ -86,6 +91,24 @@ namespace Emby.Zattoo.Plugin.LiveTv
             CancellationToken cancellationToken)
         {
             var context = RequireClient();
+            var selected = await LoadCatalogueAsync(context, tuner, cancellationToken)
+                .ConfigureAwait(false);
+            var channelIdPrefix = GetChannelIdPrefix(tuner);
+            return selected
+                .Select(channel => ZattooChannelMapper.Map(channel, channelIdPrefix))
+                .ToList();
+        }
+
+        /// <summary>
+        /// Loads the catalogue and applies everything derived from it: the guide
+        /// channel filter, the favorites used to prioritise enrichment and the
+        /// concurrent stream capacity.
+        /// </summary>
+        private async Task<IReadOnlyList<ZattooChannel>> LoadCatalogueAsync(
+            ClientContext context,
+            TunerHostInfo tuner,
+            CancellationToken cancellationToken)
+        {
             var channels = await context.Client.GetChannelsAsync(cancellationToken)
                 .ConfigureAwait(false);
             var session = context.Client.SessionInfo;
@@ -117,16 +140,19 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 1,
                 session?.MaximumConcurrentStreams ?? 1);
             streamCapacity.UpdateLimit(concurrentStreams);
+
+            // Emby compares its own TunerCount with the open streams before it ever
+            // calls this plugin, so the detected capacity has to reach the tuner
+            // Emby is holding, not only the internal lock.
             tuner.TunerCount = concurrentStreams;
-            var channelIdPrefix = GetChannelIdPrefix(tuner);
-            var result = selected
-                .Select(channel => ZattooChannelMapper.Map(
-                    channel,
-                    channelIdPrefix))
-                .ToList();
+            lock (clientSync)
+            {
+                catalogueLoadedFor = context.Client;
+            }
+
             Logger.Info(
                 "Loaded {0} of {1} Zattoo channels using {2} import mode.",
-                result.Count,
+                selected.Length,
                 channels.Count,
                 context.Settings.ChannelImportMode);
             if (session != null)
@@ -145,7 +171,57 @@ namespace Emby.Zattoo.Plugin.LiveTv
                         : "reported by the provider");
             }
 
-            return result;
+            return selected;
+        }
+
+        /// <summary>
+        /// Guarantees the catalogue was loaded for the current client. Emby serves
+        /// guide requests and stream openings from its own channel cache, which
+        /// survives a restart, so GetChannelsInternal may never have run in this
+        /// process.
+        /// </summary>
+        private async Task EnsureCatalogueAsync(
+            ClientContext context,
+            TunerHostInfo tuner,
+            CancellationToken cancellationToken)
+        {
+            if (IsCatalogueLoaded(context.Client))
+            {
+                return;
+            }
+
+            await catalogueLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (IsCatalogueLoaded(context.Client))
+                {
+                    return;
+                }
+
+                await LoadCatalogueAsync(context, tuner, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception exception)
+                when (!(exception is OperationCanceledException))
+            {
+                // Degraded but usable: the guide still loads, without the channel
+                // filter and without favorite priority for enrichment.
+                Logger.ErrorException(
+                    "The Zattoo catalogue could not be loaded; this pass runs without the imported channel filter.",
+                    exception);
+            }
+            finally
+            {
+                catalogueLock.Release();
+            }
+        }
+
+        private bool IsCatalogueLoaded(IZattooClient current)
+        {
+            lock (clientSync)
+            {
+                return ReferenceEquals(catalogueLoadedFor, current);
+            }
         }
 
         protected override Task<List<MediaSourceInfo>> GetChannelStreamMediaSources(
@@ -162,7 +238,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
             return Task.FromResult(new List<MediaSourceInfo> { source });
         }
 
-        protected override Task<ILiveStream> GetChannelStream(
+        protected override async Task<ILiveStream> GetChannelStream(
             TunerHostInfo tuner,
             BaseItem dbChannnel,
             ChannelInfo tunerChannel,
@@ -171,6 +247,11 @@ namespace Emby.Zattoo.Plugin.LiveTv
         {
             cancellationToken.ThrowIfCancellationRequested();
             var context = RequireClient();
+
+            // The stream capacity comes from the catalogue, so it has to be known
+            // before the first stream of a freshly started server is opened.
+            await EnsureCatalogueAsync(context, tuner, cancellationToken)
+                .ConfigureAwait(false);
             var channelId = tunerChannel.TunerChannelId ?? tunerChannel.Id;
             context.Client.PrioritizeGuideDetails(channelId);
             ILiveStream stream = new ZattooLiveStream(
@@ -183,7 +264,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 context.Settings.FfmpegPath,
                 AppHost.GetLocalApiUrl("127.0.0.1"),
                 Logger);
-            return Task.FromResult(stream);
+            return stream;
         }
 
         public void Dispose()
@@ -222,9 +303,11 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 var plugin = Plugin.Instance
                     ?? throw new InvalidOperationException(
                         "The Zattoo plugin has not finished loading.");
-                var settings = plugin.GetRuntimeSettings(out var revision);
-                if (client == null || clientConfigurationRevision != revision)
+                if (client == null
+                    || cachedSettings == null
+                    || clientConfigurationRevision != plugin.ConfigurationRevision)
                 {
+                    var settings = plugin.GetRuntimeSettings(out var revision);
                     settings.ClientOptions.GuideDetailsProgress =
                         LogGuideDetailsProgress;
                     var replacement = new ZattooClient(settings.ClientOptions);
@@ -235,11 +318,13 @@ namespace Emby.Zattoo.Plugin.LiveTv
                     // while a recording is running.
                     clientToRetire = client;
                     client = replacement;
+                    catalogueLoadedFor = null;
+                    cachedSettings = settings;
                     clientConfigurationRevision = revision;
                     Logger.Info("Zattoo client configuration activated.");
                 }
 
-                context = new ClientContext(client, settings);
+                context = new ClientContext(client, cachedSettings);
             }
 
             if (clientToRetire != null)
