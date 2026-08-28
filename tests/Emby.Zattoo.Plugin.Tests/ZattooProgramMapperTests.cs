@@ -70,4 +70,133 @@ public sealed class ZattooProgramMapperTests
     {
         Assert.Throws<ArgumentNullException>(() => ZattooProgramMapper.Map(null!));
     }
+
+    [Fact]
+    public void Map_UsesTheContentIdentifierAsShowId()
+    {
+        var info = ZattooProgramMapper.Map(new ZattooProgram
+        {
+            Id = "broadcast-1",
+            ContentId = "EP0123456700010",
+            Name = "Episode",
+            StartDate = DateTimeOffset.UtcNow,
+            EndDate = DateTimeOffset.UtcNow.AddHours(1),
+        });
+
+        // Emby matches repeats through ShowId, so it has to identify the content
+        // rather than one airing of it.
+        Assert.Equal("EP0123456700010", info.ShowId);
+    }
+
+    [Fact]
+    public void Map_FallsBackToTheBroadcastIdWithoutAContentIdentifier()
+    {
+        var info = ZattooProgramMapper.Map(new ZattooProgram
+        {
+            Id = "broadcast-1",
+            Name = "Episode",
+            StartDate = DateTimeOffset.UtcNow,
+            EndDate = DateTimeOffset.UtcNow.AddHours(1),
+        });
+
+        Assert.Equal("broadcast-1", info.ShowId);
+    }
+
+    [Fact]
+    public void Map_ReportsSeriesYearAndRating()
+    {
+        var info = ZattooProgramMapper.Map(new ZattooProgram
+        {
+            Id = "broadcast-1",
+            Name = "Episode",
+            StartDate = DateTimeOffset.UtcNow,
+            EndDate = DateTimeOffset.UtcNow.AddHours(1),
+            IsSeries = true,
+            ProductionYear = 1998,
+            AgeRating = "12",
+        });
+
+        Assert.True(info.IsSeries);
+        Assert.Equal(1998, info.ProductionYear);
+        Assert.Equal("12", info.OfficialRating);
+    }
+
+    [Fact]
+    public void Map_TreatsAnEpisodeNumberAsASeriesEvenWithoutTheProviderFlag()
+    {
+        var info = ZattooProgramMapper.Map(new ZattooProgram
+        {
+            Id = "broadcast-1",
+            Name = "Episode",
+            StartDate = DateTimeOffset.UtcNow,
+            EndDate = DateTimeOffset.UtcNow.AddHours(1),
+            EpisodeNumber = 4,
+        });
+
+        Assert.True(info.IsSeries);
+    }
+
+    [Theory]
+    [InlineData(5, true, false, false, false)]
+    [InlineData(4, false, true, false, false)]
+    [InlineData(3, false, false, true, false)]
+    [InlineData(2, false, false, false, true)]
+    [InlineData(6, false, false, false, false)]
+    [InlineData(7, false, false, false, false)]
+    public void Map_DerivesCategoryFlagsFromTheProviderIdentifiers(
+        int categoryId,
+        bool isMovie,
+        bool isSports,
+        bool isNews,
+        bool isKids)
+    {
+        var info = ZattooProgramMapper.Map(new ZattooProgram
+        {
+            Id = "broadcast-1",
+            Name = "Program",
+            StartDate = DateTimeOffset.UtcNow,
+            EndDate = DateTimeOffset.UtcNow.AddHours(1),
+            CategoryIds = new[] { categoryId },
+        });
+
+        Assert.Equal(isMovie, info.IsMovie);
+        Assert.Equal(isSports, info.IsSports);
+        Assert.Equal(isNews, info.IsNews);
+        Assert.Equal(isKids, info.IsKids);
+    }
+
+    [Fact]
+    public void Map_IgnoresAnUnknownCategory()
+    {
+        var info = ZattooProgramMapper.Map(new ZattooProgram
+        {
+            Id = "broadcast-1",
+            Name = "Program",
+            StartDate = DateTimeOffset.UtcNow,
+            EndDate = DateTimeOffset.UtcNow.AddHours(1),
+            CategoryIds = new[] { 42 },
+        });
+
+        // An identifier the provider adds later must not be guessed at.
+        Assert.False(info.IsMovie);
+        Assert.False(info.IsSports);
+        Assert.False(info.IsNews);
+        Assert.False(info.IsKids);
+        Assert.False(info.IsSeries);
+    }
+
+    [Fact]
+    public void Map_TreatsTheSeriesCategoryAsASeries()
+    {
+        var info = ZattooProgramMapper.Map(new ZattooProgram
+        {
+            Id = "broadcast-1",
+            Name = "Program",
+            StartDate = DateTimeOffset.UtcNow,
+            EndDate = DateTimeOffset.UtcNow.AddHours(1),
+            CategoryIds = new[] { 1 },
+        });
+
+        Assert.True(info.IsSeries);
+    }
 }

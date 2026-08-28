@@ -300,6 +300,10 @@ namespace Emby.Zattoo.Zattoo
 
         public int? EpisodeNumber { get; set; }
 
+        public int? ProductionYear { get; set; }
+
+        public string? AgeRating { get; set; }
+
         public bool IsValid()
         {
             return !string.IsNullOrWhiteSpace(Id)
@@ -323,6 +327,8 @@ namespace Emby.Zattoo.Zattoo
                 Genres = Genres ?? Array.Empty<string>(),
                 SeasonNumber = SeasonNumber,
                 EpisodeNumber = EpisodeNumber,
+                ProductionYear = ProductionYear,
+                AgeRating = AgeRating,
             };
         }
     }

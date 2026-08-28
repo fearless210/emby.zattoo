@@ -378,6 +378,16 @@ namespace Emby.Zattoo.Zattoo
             {
                 program.EpisodeNumber = details.EpisodeNumber;
             }
+
+            if (!program.ProductionYear.HasValue)
+            {
+                program.ProductionYear = details.ProductionYear;
+            }
+
+            if (string.IsNullOrWhiteSpace(program.AgeRating))
+            {
+                program.AgeRating = details.AgeRating;
+            }
         }
 
         public void Stop()
@@ -790,6 +800,8 @@ namespace Emby.Zattoo.Zattoo
                 Genres = entry.Details?.Genres.ToArray() ?? Array.Empty<string>(),
                 SeasonNumber = entry.Details?.SeasonNumber,
                 EpisodeNumber = entry.Details?.EpisodeNumber,
+                ProductionYear = entry.Details?.ProductionYear,
+                AgeRating = entry.Details?.AgeRating,
             };
         }
 

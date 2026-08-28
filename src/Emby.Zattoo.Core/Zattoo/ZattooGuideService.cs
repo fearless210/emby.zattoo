@@ -497,6 +497,10 @@ namespace Emby.Zattoo.Zattoo
                 Genres = ReadStringArray(element, "g"),
                 SeasonNumber = ReadNonNegativeInt32(element, "s_no"),
                 EpisodeNumber = ReadNonNegativeInt32(element, "e_no"),
+                ContentId = EmptyToNull(ReadString(element, "tms_id")),
+                CategoryIds = ReadInt32Array(element, "c_ids"),
+                IsSeries = ReadBoolean(element, "ser_e"),
+                AgeRating = EmptyToNull(ReadString(element, "yp_r")),
                 ImageUrl = BuildProgramImageUrl(
                     ReadString(element, "i_url"),
                     ReadString(element, "i_t")),
@@ -519,6 +523,11 @@ namespace Emby.Zattoo.Zattoo
                 SeasonNumber = source.SeasonNumber,
                 EpisodeNumber = source.EpisodeNumber,
                 ImageUrl = source.ImageUrl,
+                ContentId = source.ContentId,
+                CategoryIds = source.CategoryIds.ToArray(),
+                IsSeries = source.IsSeries,
+                AgeRating = source.AgeRating,
+                ProductionYear = source.ProductionYear,
             };
         }
 
@@ -568,6 +577,12 @@ namespace Emby.Zattoo.Zattoo
                 && property.ValueKind == JsonValueKind.String
                 ? property.GetString() ?? string.Empty
                 : string.Empty;
+        }
+
+        private static bool ReadBoolean(JsonElement element, string propertyName)
+        {
+            return element.TryGetProperty(propertyName, out var property)
+                && ReadBoolean(property);
         }
 
         private static bool ReadBoolean(JsonElement element)
@@ -658,6 +673,30 @@ namespace Emby.Zattoo.Zattoo
                 && property.TryGetInt64(out var numeric)
                 ? numeric.ToString(CultureInfo.InvariantCulture)
                 : string.Empty;
+        }
+
+        private static IReadOnlyList<int> ReadInt32Array(
+            JsonElement element,
+            string propertyName)
+        {
+            if (!element.TryGetProperty(propertyName, out var property)
+                || property.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<int>();
+            }
+
+            var values = new List<int>();
+            foreach (var item in property.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Number
+                    && item.TryGetInt32(out var numeric)
+                    && !values.Contains(numeric))
+                {
+                    values.Add(numeric);
+                }
+            }
+
+            return values;
         }
 
         private static IReadOnlyList<string> ReadStringArray(

@@ -16,5 +16,11 @@ namespace Emby.Zattoo.Models
         public int? SeasonNumber { get; set; }
 
         public int? EpisodeNumber { get; set; }
+
+        /// <summary>Gets or sets the production year, when published.</summary>
+        public int? ProductionYear { get; set; }
+
+        /// <summary>Gets or sets the age rating published for the program.</summary>
+        public string? AgeRating { get; set; }
     }
 }

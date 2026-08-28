@@ -1074,6 +1074,8 @@ namespace Emby.Zattoo.Zattoo
                     Genres = ReadStringArray(element, "g"),
                     SeasonNumber = ReadNonNegativeInt32(element, "s_no"),
                     EpisodeNumber = ReadNonNegativeInt32(element, "e_no"),
+                    ProductionYear = ReadNonNegativeInt32(element, "year"),
+                    AgeRating = EmptyToNull(ReadString(element, "yp_r")),
                 });
             }
 
