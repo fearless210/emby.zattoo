@@ -60,17 +60,8 @@ namespace Emby.Zattoo.Plugin
         protected override ZattooPluginOptions OnBeforeShowUI(
             ZattooPluginOptions options)
         {
-            return new ZattooPluginOptions
-            {
-                Username = options.Username,
-                Password = passwordStore.GetDisplayValue(options.Password),
-                PreferredQuality = options.PreferredQuality,
-                ChannelImportMode = options.ChannelImportMode,
-                EnableGuideDetails = options.EnableGuideDetails,
-                FfmpegPath = options.FfmpegPath,
-                ProviderUrl = options.ProviderUrl,
-                ApplicationVersion = options.ApplicationVersion,
-            };
+            return options.CopyForDisplay(
+                passwordStore.GetDisplayValue(options.Password));
         }
 
         protected override bool OnOptionsSaving(ZattooPluginOptions options)

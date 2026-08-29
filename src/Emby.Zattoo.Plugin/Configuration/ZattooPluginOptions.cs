@@ -72,6 +72,27 @@ namespace Emby.Zattoo.Plugin.Configuration
         [Description("Advanced diagnostic setting. Keep the default unless the provider changes it.")]
         public string ApplicationVersion { get; set; } = "3.2120.1";
 
+        /// <summary>
+        /// Copies every setting, replacing only the password with what may be
+        /// shown. The copy is made by reflection on purpose: listing the
+        /// properties by hand meant a setting added later was silently dropped
+        /// when the page opened, and erased on the next save.
+        /// </summary>
+        internal ZattooPluginOptions CopyForDisplay(string displayPassword)
+        {
+            var copy = new ZattooPluginOptions();
+            foreach (var property in typeof(ZattooPluginOptions).GetProperties())
+            {
+                if (property.CanRead && property.CanWrite)
+                {
+                    property.SetValue(copy, property.GetValue(this));
+                }
+            }
+
+            copy.Password = displayPassword;
+            return copy;
+        }
+
         protected override void Validate(ValidationContext context)
         {
             if (string.IsNullOrWhiteSpace(Username))
