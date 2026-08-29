@@ -105,9 +105,15 @@ catch (ZattooException exception)
     Console.Error.WriteLine(SensitiveDataSanitizer.SanitizeText(exception.Message));
     return 1;
 }
-catch (Exception)
+catch (Exception exception)
 {
-    Console.Error.WriteLine("Unexpected failure while running the Zattoo spike.");
+    // The type and the redacted message are needed to tell a provider problem
+    // from a local one. SanitizeText removes any signed URL the message carries.
+    Console.Error.WriteLine(
+        "Unexpected failure while running the Zattoo spike: "
+        + exception.GetType().Name
+        + ": "
+        + SensitiveDataSanitizer.SanitizeText(exception.Message));
     return 1;
 }
 
@@ -510,9 +516,9 @@ static async Task<int> FfmpegTestAsync(
     if (arguments.Length >= 3
         && (!int.TryParse(arguments[2], out durationSeconds)
             || durationSeconds < 5
-            || durationSeconds > 1800))
+            || durationSeconds > 7200))
     {
-        Console.Error.WriteLine("Duration must be between 5 and 1800 seconds.");
+        Console.Error.WriteLine("Duration must be between 5 and 7200 seconds.");
         return 2;
     }
 

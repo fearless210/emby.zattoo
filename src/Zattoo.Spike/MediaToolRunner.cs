@@ -144,6 +144,7 @@ internal static class MediaToolRunner
 
         var timedOut = false;
         var completedRequestedDuration = !gracefulStopAfter.HasValue;
+        var sampledCpuTime = TimeSpan.Zero;
         try
         {
             var processExit = process.WaitForExitAsync(timeoutCancellation.Token);
@@ -163,6 +164,10 @@ internal static class MediaToolRunner
                     {
                         await stopDelay;
                         completedRequestedDuration = true;
+
+                        // Sampled while the process is still alive: Linux drops
+                        // the accounting as soon as it exits.
+                        sampledCpuTime = TryReadCpuTime(process) ?? sampledCpuTime;
                         await RequestGracefulStopAsync(process);
                     }
                 }
@@ -211,7 +216,7 @@ internal static class MediaToolRunner
             ExitCode = exitCode,
             TimedOut = timedOut,
             Elapsed = stopwatch.Elapsed,
-            CpuTime = process.TotalProcessorTime,
+            CpuTime = TryReadCpuTime(process) ?? sampledCpuTime,
             MediaProcessed = progress.MediaProcessed,
             ProgressReportCount = progress.ReportCount,
             LastReportedSpeed = progress.LastSpeed,
@@ -338,6 +343,27 @@ internal static class MediaToolRunner
         }
 
         return result.ToString().Trim();
+    }
+
+    /// <summary>
+    /// Reads the processor time, or returns null when the platform no longer
+    /// exposes it. Linux discards the accounting of an exited process, and the
+    /// failure must not mask the tool result being reported.
+    /// </summary>
+    private static TimeSpan? TryReadCpuTime(Process process)
+    {
+        try
+        {
+            return process.TotalProcessorTime;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
     }
 
     private static async Task RequestGracefulStopAsync(Process process)
