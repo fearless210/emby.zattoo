@@ -5,7 +5,7 @@ quelle autre source Live TV.** Le plugin s'exécute entièrement côté serveur 
 il ouvre le flux Zattoo, choisit une piste vidéo et une piste audio, puis les
 remuxe en MPEG-TS pour les clients Emby, sans réencodage.
 
-> **Projet non officiel et expérimental**, sans aucun lien avec Zattoo ni avec
+> **Projet non officiel**, sans aucun lien avec Zattoo ni avec
 > Emby. Il ne déchiffre aucune chaîne protégée et ne contourne aucun DRM.
 
 ```text
