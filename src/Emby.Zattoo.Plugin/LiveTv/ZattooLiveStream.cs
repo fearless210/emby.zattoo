@@ -398,12 +398,11 @@ namespace Emby.Zattoo.Plugin.LiveTv
             {
                 "-hide_banner",
                 "-loglevel", "warning",
-                "-i", selection.VideoUri.AbsoluteUri,
             };
+            AddInput(arguments, selection.VideoUri);
             if (selection.AudioUri != null)
             {
-                arguments.Add("-i");
-                arguments.Add(selection.AudioUri.AbsoluteUri);
+                AddInput(arguments, selection.AudioUri);
             }
 
             arguments.Add("-map");
@@ -414,6 +413,11 @@ namespace Emby.Zattoo.Plugin.LiveTv
             arguments.Add("copy");
             arguments.Add("-mpegts_flags");
             arguments.Add("+resend_headers");
+
+            // Hand each packet to Emby as it is produced. Buffering here only
+            // delays the first bytes a client waits for before it gives up.
+            arguments.Add("-flush_packets");
+            arguments.Add("1");
             arguments.Add("-f");
             arguments.Add("mpegts");
             arguments.Add("pipe:1");
@@ -428,6 +432,25 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 RedirectStandardError = true,
                 RedirectStandardInput = true,
             };
+        }
+
+        /// <summary>
+        /// Adds one input along with the HTTP reconnection options. Without them a
+        /// single failed segment request ends the remux and the viewer loses the
+        /// channel; with them FFmpeg retries by itself. Only options available in
+        /// every FFmpeg the server is likely to ship are used, because an unknown
+        /// option would stop it from starting at all.
+        /// </summary>
+        private static void AddInput(List<string> arguments, Uri input)
+        {
+            arguments.Add("-reconnect");
+            arguments.Add("1");
+            arguments.Add("-reconnect_streamed");
+            arguments.Add("1");
+            arguments.Add("-reconnect_delay_max");
+            arguments.Add("5");
+            arguments.Add("-i");
+            arguments.Add(input.AbsoluteUri);
         }
 
         private async Task MonitorStandardErrorAsync(Process currentProcess)
