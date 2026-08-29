@@ -1,13 +1,28 @@
-# Exécution du Stream Spike
+# Outil de diagnostic
+
+`Zattoo.Spike` interroge un compte Zattoo sans passer par Emby. Il sert à
+distinguer un problème du fournisseur d'un problème du plugin, et à construire
+une fonctionnalité sur ce qu'un compte reçoit réellement.
 
 Toutes les commandes lisent `ZATTOO_USERNAME` et `ZATTOO_PASSWORD` dans
-l'environnement. Elles n'affichent ni les identifiants, ni les cookies, ni les
-URLs signées.
+l'environnement du processus. Elles n'affichent ni identifiant, ni cookie, ni
+URL signée.
+
+```bash
+read -rp 'Zattoo username: ' ZU && read -rsp 'Zattoo password: ' ZP && echo \
+  && ZATTOO_USERNAME="$ZU" ZATTOO_PASSWORD="$ZP" \
+     dotnet run --project src/Zattoo.Spike -- channels; unset ZU ZP
+```
+
+Cette forme évite d'inscrire le mot de passe dans l'historique du shell : il est
+saisi masqué et ne vit que le temps de la commande. Les variables optionnelles
+`ZATTOO_PROVIDER_URL`, `ZATTOO_LANGUAGE` et `ZATTOO_APP_VERSION` se définissent
+de la même façon.
 
 ## 0. Inventaire des champs publiés
 
 ```bash
-dotnet run --project src/Zattoo.Spike --configuration Release -- fields-survey
+dotnet run --project src/Zattoo.Spike -- fields-survey
 ```
 
 La commande interroge les réponses chaînes, favoris, guide et détails, puis
@@ -29,12 +44,12 @@ de session change réellement.
 
 ## 1. Inventaire sans URL de lecture
 
-```powershell
-dotnet run --project src/Zattoo.Spike --configuration Release -- channels
-dotnet run --project src/Zattoo.Spike --configuration Release -- survey
-dotnet run --project src/Zattoo.Spike --configuration Release -- epg-survey 14
-dotnet run --project src/Zattoo.Spike --configuration Release -- epg-endpoint-survey 5
-dotnet run --project src/Zattoo.Spike --configuration Release -- epg-details-survey 100
+```bash
+dotnet run --project src/Zattoo.Spike -- channels
+dotnet run --project src/Zattoo.Spike -- survey
+dotnet run --project src/Zattoo.Spike -- epg-survey 14
+dotnet run --project src/Zattoo.Spike -- epg-endpoint-survey 5
+dotnet run --project src/Zattoo.Spike -- epg-details-survey 100
 ```
 
 `channels` affiche le numéro, le nom et le `cid` stable. `survey` calcule la
@@ -64,10 +79,10 @@ son activation dans Emby.
 
 ## 2. Options d'une chaîne
 
-```powershell
-dotnet run --project src/Zattoo.Spike --configuration Release -- streams 1
-dotnet run --project src/Zattoo.Spike --configuration Release -- streams "RTS 1"
-dotnet run --project src/Zattoo.Spike --configuration Release -- streams <cid>
+```bash
+dotnet run --project src/Zattoo.Spike -- streams 1
+dotnet run --project src/Zattoo.Spike -- streams "RTS 1"
+dotnet run --project src/Zattoo.Spike -- streams <cid>
 ```
 
 Cette commande explicite demande une URL éphémère pour chaque qualité non DRM de
@@ -79,11 +94,11 @@ Aucune URL n'est imprimée.
 Installer `ffprobe` dans le `PATH`, ou définir `FFPROBE_PATH` vers l'exécutable,
 puis lancer :
 
-```powershell
-dotnet run --project src/Zattoo.Spike --configuration Release -- probe <cid> auto dash
-dotnet run --project src/Zattoo.Spike --configuration Release -- probe <cid> auto hls
-dotnet run --project src/Zattoo.Spike --configuration Release -- probe <cid> auto hls-ts
-dotnet run --project src/Zattoo.Spike --configuration Release -- probe <cid> 720p dash
+```bash
+dotnet run --project src/Zattoo.Spike -- probe <cid> auto dash
+dotnet run --project src/Zattoo.Spike -- probe <cid> auto hls
+dotnet run --project src/Zattoo.Spike -- probe <cid> auto hls-ts
+dotnet run --project src/Zattoo.Spike -- probe <cid> 720p dash
 ```
 
 Le timeout est fixé à 45 secondes. La sortie doit montrer une piste vidéo et une
@@ -91,14 +106,19 @@ piste audio et se terminer avec le code 0.
 
 ## 4. Test de remux MPEG-TS sans réencodage
 
-Installer `ffmpeg` dans le `PATH`, ou définir `FFMPEG_PATH`, puis lancer d'abord
-un test court et ensuite cinq minutes :
+Cette commande a besoin d'un `ffmpeg` local, dans le `PATH` ou désigné par
+`FFMPEG_PATH` — contrairement au plugin, qui utilise celui d'Emby. Le binaire
+livré avec Emby ne convient pas ici : son interpréteur est référencé par un
+chemin relatif, il ne s'exécute donc que depuis le répertoire du serveur et avec
+l'environnement de son service.
 
-```powershell
-dotnet run --project src/Zattoo.Spike --configuration Release -- ffmpeg-test <cid> 30 auto dash
-dotnet run --project src/Zattoo.Spike --configuration Release -- ffmpeg-test <cid> 30 auto hls
-dotnet run --project src/Zattoo.Spike --configuration Release -- ffmpeg-test <cid> 30 auto hls-ts
-dotnet run --project src/Zattoo.Spike --configuration Release -- ffmpeg-test <cid> 300 auto hls-ts
+Lancer d'abord un test court, puis un plus long :
+
+```bash
+dotnet run --project src/Zattoo.Spike -- ffmpeg-test <cid> 30 auto dash
+dotnet run --project src/Zattoo.Spike -- ffmpeg-test <cid> 30 auto hls
+dotnet run --project src/Zattoo.Spike -- ffmpeg-test <cid> 30 auto hls-ts
+dotnet run --project src/Zattoo.Spike -- ffmpeg-test <cid> 300 auto hls-ts
 ```
 
 L'outil conserve côté entrée la première représentation vidéo et la première
@@ -113,7 +133,9 @@ pour une fermeture propre. `-re` n'est pas
 utilisé sur cette entrée Live : la documentation ffmpeg avertit qu'une readrate
 faible sur une vraie source Live peut provoquer du retard ou des pertes. Dans le
 plugin, le consommateur de sortie applique naturellement la contre-pression. Le
-timeout de secours vaut la durée plus 45 secondes. Le
+timeout de secours vaut la durée plus 45 secondes, et la durée acceptée va de 5
+à 7200 secondes — de quoi couvrir un enregistrement complet et vérifier qu'une
+URL signée reste valable sur cette longueur. Le
 dernier argument permet de comparer DASH (argument `dash`,
 `stream_type=dash`), HLS7/fMP4 (argument `hls`, `stream_type=hls7`) et
 HLS/MPEG-TS (argument `hls-ts`, `stream_type=hls`) tout en conservant le même
@@ -127,7 +149,8 @@ démultiplexeur sonde toutes les variantes adaptatives au démarrage.
 
 ## Interprétation
 
-- code 0 pour les deux outils : candidat technique au GO ;
+- code 0 pour les deux outils, avec un temps CPU très inférieur à la durée
+  traitée : la copie de flux fonctionne, sans réencodage ;
 - `Unsupported` : DRM détecté, aucun test ne doit être tenté ;
 - `Unavailable` : le catalogue annonçait la qualité mais l'API n'a pas retourné
   d'URL exploitable ;

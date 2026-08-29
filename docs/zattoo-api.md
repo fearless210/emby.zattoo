@@ -1,10 +1,14 @@
-# API Zattoo observée dans `pvr.zattoo`
+# Protocole Zattoo observé
 
-Cette documentation décrit le comportement observé dans la branche `Piers` de
-[`rbuehlma/pvr.zattoo`](https://github.com/rbuehlma/pvr.zattoo), version 22.2.3,
-commit `30c809e66f8eef22987fb518e89875031781dcae`. Il ne s'agit pas
-d'une API publique contractuelle de Zattoo. Les chemins, champs et durées peuvent
-changer sans préavis.
+Zattoo ne publie aucune API contractuelle : les chemins, champs et durées
+décrits ici sont **observés**, et peuvent changer sans préavis.
+
+La séquence et les endpoints ont d'abord été reconstitués à partir de la branche
+`Piers` de [`rbuehlma/pvr.zattoo`](https://github.com/rbuehlma/pvr.zattoo),
+version 22.2.3, commit `30c809e66f8eef22987fb518e89875031781dcae`. La section
+[Champs réellement publiés](#champs-réellement-publiés) les complète par ce qu'un
+compte reçoit vraiment, mesuré avec la commande `fields-survey` de l'outil de
+diagnostic — plusieurs champs utiles manquaient à cette reconstitution.
 
 Le présent projet réimplémente uniquement le protocole observé. Aucun code GPL
 n'est copié et aucun mécanisme de déchiffrement ou de contournement DRM n'est
@@ -200,7 +204,7 @@ environ 96 minutes à la cadence prudente d'un lot par seconde. Il ne doit donc
 pas bloquer la tâche native Emby et n'est pas exécuté : la fenêtre glissante et
 les favoris bornent le volume réellement enrichi.
 
-### Stream Live (implémenté dans le spike)
+### Stream Live
 
 | Élément | Valeur observée |
 |---|---|
@@ -236,6 +240,49 @@ futurs en `404` lors du test ffmpeg.
 La réponse peut fournir `stream.url` ou `stream.watch_urls`. Comme la référence,
 le prototype retient la première entrée `watch_urls` exploitable et lit son
 `maxrate`; `stream.url` sert de fallback.
+
+## Champs réellement publiés
+
+Ce document décrivait au départ un protocole reconstitué à partir d'une
+implémentation tierce. La commande `fields-survey` mesure désormais ce qu'un
+compte reçoit vraiment, et plusieurs champs utiles n'y figuraient pas. Les
+relevés ci-dessous proviennent d'un compte suisse ; ils varient selon
+l'abonnement et la région.
+
+### Catalogue des chaînes
+
+| Champ | Usage |
+| --- | --- |
+| `cid` | Identifiant stable, seule base d'identité |
+| `number` | **Numéro officiel de la chaîne**, publié pour toutes. Le plugin s'en sert plutôt que de la position dans la réponse, qui se décale au moindre ajout |
+| `title` | Nom de la chaîne |
+| `is_radio` | Distingue les stations de radio des chaînes de télévision |
+| `group_index` | Index dans le tableau `groups`, qui porte les noms de bouquets |
+| `recording` | Enregistrement autorisé par le fournisseur |
+| `qualities[]` | `level`, `availability`, `drm_required`, `title`, `stream_types` |
+| `qualities[].logo_white_84`, `logo_black_84` | Logos, en variantes claire et sombre, également disponibles en 42 pixels |
+
+### Guide
+
+| Champ | Usage |
+| --- | --- |
+| `id`, `s`, `e`, `t`, `et` | Diffusion : identifiant, début, fin, titre, sous-titre |
+| `tms_id` | **Identifiant du contenu**, stable d'une diffusion à l'autre. Renseigné sur 98 % des programmes, il alimente le `ShowId` d'Emby dont dépend l'enregistrement de série |
+| `c`, `c_ids` | Catégories, en libellés localisés et en identifiants numériques. Les identifiants observés : 1 Séries, 2 Enfants, 3 Information, 4 Sport, 5 Films, 6 Divertissement, 7 Documentaires |
+| `ser_e` | Marque un programme de série |
+| `g` | Genres, vocabulaire trop vaste pour être énuméré |
+| `yp_r` | Classification d'âge, au format FSK sur le compte observé |
+| `s_no`, `e_no` | Saison et épisode, renseignés sur environ un tiers des programmes |
+| `d` | Description, absente du guide et obtenue par l'endpoint de détails |
+| `i_url`, `i_t` | Image, en URL complète ou en jeton |
+
+### Détails de programme
+
+Les mêmes champs, plus `year`, `country`, `cast[]`, `crew[]` et `cr` — ces trois
+derniers sans équivalent dans le contrat EPG d'Emby, donc inutilisés.
+
+Le mapping s'appuie sur les **identifiants numériques** et jamais sur les
+libellés, qui dépendent du compte.
 
 ## Langue des métadonnées
 

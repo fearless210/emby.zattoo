@@ -28,6 +28,10 @@ caches must not be committed.
 - DRM-protected streams remain unsupported; do not submit DRM bypass or
   decryption code.
 
+Read [docs/architecture.md](docs/architecture.md) first: it explains how the
+plugin works, what the Emby API imposes, and the traps already hit. It saves
+reading the whole codebase.
+
 ## Scope
 
 Keep the Zattoo Core independent from Emby-specific types. Changes to Emby Live
