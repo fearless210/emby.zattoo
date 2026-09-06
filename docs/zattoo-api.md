@@ -237,6 +237,26 @@ Le paramètre Kodi `timeshift=10800` n'est pas utilisé : le timeshift avancé e
 hors MVP et sa fenêtre a provoqué des lectures accélérées suivies de fragments
 futurs en `404` lors du test ffmpeg.
 
+### Durée de vie mesurée d'une URL signée
+
+La commande `stream-lifetime` a suivi une playlist média signée et son segment
+le plus récent, une fois par minute pendant **trois heures**, sur une chaîne
+suisse en 720p. La playlist et les segments ont répondu `200` du début à la fin,
+et la séquence média a progressé sans interruption, d'environ 37 segments par
+minute — soit des segments de l'ordre de 1,6 seconde.
+
+Une URL signée ne se périme donc pas à l'échelle d'un enregistrement. Cette
+mesure recoupe l'enregistrement de 2 h 10 mené à terme sur un Emby réel. Le
+plugin n'a pas besoin de renouveler une URL par anticipation, et aucun minuteur
+de rafraîchissement n'est prévu.
+
+La portée de la mesure s'arrête là : le sondage lit un segment par minute, non
+chaque segment comme le fait ffmpeg. Elle établit que l'autorisation reste
+valable trois heures, pas qu'aucune requête individuelle ne peut échouer. Une
+révocation côté fournisseur, une limite de flux simultanés atteinte depuis un
+autre appareil ou un incident réseau restent possibles à tout moment, et sont
+traités comme des évènements imprévisibles plutôt que comme une échéance.
+
 La réponse peut fournir `stream.url` ou `stream.watch_urls`. Comme la référence,
 le prototype retient la première entrée `watch_urls` exploitable et lit son
 `maxrate`; `stream.url` sert de fallback.

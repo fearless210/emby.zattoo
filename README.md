@@ -28,7 +28,7 @@ Les identifiants, les cookies et les URL signées ne quittent jamais le serveur.
 | | |
 | --- | --- |
 | **Chaînes** | Import des noms, numéros officiels, favoris, logos et bouquets, en ne retenant par défaut que les chaînes réellement lisibles sans DRM |
-| **Lecture** | Flux HLS obtenu à la demande et remuxé en MPEG-TS, sans réencodage, avec reconnexion automatique en cas d'incident réseau |
+| **Lecture** | Flux HLS obtenu à la demande et remuxé en MPEG-TS, sans réencodage, avec reconnexion automatique en cas d'incident réseau et réouverture du flux si le fournisseur l'interrompt, sans couper un enregistrement en cours |
 | **Qualité** | Meilleure qualité non-DRM disponible, ou plafond manuel `1080p`, `720p`, `540p` |
 | **Guide TV** | EPG jusqu'à 14 jours, limité aux chaînes importées, avec descriptions et genres chargés progressivement en arrière-plan |
 | **Grille Emby** | Rubriques Films, Séries, Sport, Jeunesse et Actualités remplies, enregistrement de séries fonctionnel, année et classification d'âge |

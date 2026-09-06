@@ -1,3 +1,4 @@
+using System.Globalization;
 using Emby.Zattoo.Exceptions;
 using Emby.Zattoo.Infrastructure;
 using Emby.Zattoo.Models;
@@ -83,6 +84,7 @@ try
         "streams" => await PrintStreamsAsync(client, args, cancellation.Token),
         "probe" => await ProbeAsync(client, args, cancellation.Token),
         "ffmpeg-test" => await FfmpegTestAsync(client, args, cancellation.Token),
+        "stream-lifetime" => await StreamLifetimeAsync(client, args, cancellation.Token),
         _ => PrintUnknownCommand(),
     };
 }
@@ -567,6 +569,232 @@ static async Task<int> FfmpegTestAsync(
     return passed ? 0 : 1;
 }
 
+/// <summary>
+/// Measures how long a signed HLS URL keeps being served, which is the lifetime
+/// the live stream silently depends on today: FFmpeg receives these URLs once at
+/// open and has no way to renew them.
+/// </summary>
+static async Task<int> StreamLifetimeAsync(
+    IZattooClient client,
+    string[] arguments,
+    CancellationToken cancellationToken)
+{
+    if (arguments.Length < 2)
+    {
+        Console.Error.WriteLine(
+            "Usage: stream-lifetime <channel-id|number|exact-name> [poll-seconds] [max-minutes] [auto|1080p|720p|540p]");
+        return 2;
+    }
+
+    var pollSeconds = 30;
+    if (arguments.Length >= 3
+        && (!int.TryParse(arguments[2], out pollSeconds)
+            || pollSeconds < 5
+            || pollSeconds > 600))
+    {
+        Console.Error.WriteLine("The poll interval must be between 5 and 600 seconds.");
+        return 2;
+    }
+
+    var maximumMinutes = 240;
+    if (arguments.Length >= 4
+        && (!int.TryParse(arguments[3], out maximumMinutes)
+            || maximumMinutes < 1
+            || maximumMinutes > 720))
+    {
+        Console.Error.WriteLine("The measurement window must be between 1 and 720 minutes.");
+        return 2;
+    }
+
+    var preference = ParsePreference(arguments.Length >= 5 ? arguments[4] : "auto");
+    var channels = await client.GetChannelsAsync(cancellationToken);
+    var channel = ResolveChannel(channels, arguments[1]);
+
+    var acquired = await AcquireSignedPlaylistAsync(
+        client,
+        channel,
+        preference,
+        cancellationToken);
+    Console.WriteLine(
+        $"Measuring the signed URL lifetime of {channel.Name}: {acquired.Quality} HLS non-DRM.");
+    Console.WriteLine(
+        $"Polling every {pollSeconds}s for up to {maximumMinutes} min. This holds one concurrent stream of the account until the command ends.");
+    Console.WriteLine("Only elapsed time and HTTP status are printed; no signed URL is shown.");
+    Console.WriteLine();
+
+    var playlistUri = acquired.PlaylistUri;
+    var started = DateTimeOffset.UtcNow;
+    var deadline = started.AddMinutes(maximumMinutes);
+    long? previousSequence = null;
+    var lastAdvance = started;
+    var longestStall = TimeSpan.Zero;
+    string? failedStage = null;
+    var failedStatus = string.Empty;
+    var failedAfter = TimeSpan.Zero;
+    var cancelled = false;
+
+    while (true)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var elapsed = now - started;
+        var playlistProbe = await SignedUrlProbe.ProbeAsync(
+            playlistUri,
+            maximumBytes: 512 * 1024,
+            cancellationToken);
+        if (!playlistProbe.IsSuccess)
+        {
+            PrintLifetimeSample(elapsed, playlistProbe.Status, "---", null);
+            failedStage = "media playlist";
+            failedStatus = playlistProbe.Status;
+            failedAfter = elapsed;
+            break;
+        }
+
+        long? sequence;
+        Uri? segmentUri;
+        try
+        {
+            var playlist = HlsMediaPlaylistReader.Read(playlistProbe.Content, playlistUri);
+            sequence = playlist.MediaSequence;
+            segmentUri = playlist.LastSegmentUri;
+        }
+        catch (ZattooProtocolException)
+        {
+            // A 200 that no longer carries a playlist is an expiry too: some
+            // origins answer an error document rather than a status code.
+            PrintLifetimeSample(elapsed, "not a playlist", "---", null);
+            failedStage = "media playlist";
+            failedStatus = "200 without a playlist";
+            failedAfter = elapsed;
+            break;
+        }
+
+        var segmentStatus = "none";
+        if (segmentUri != null)
+        {
+            var segmentProbe = await SignedUrlProbe.ProbeAsync(
+                segmentUri,
+                maximumBytes: 64 * 1024,
+                cancellationToken);
+            segmentStatus = segmentProbe.Status;
+            if (!segmentProbe.IsSuccess)
+            {
+                PrintLifetimeSample(elapsed, playlistProbe.Status, segmentStatus, sequence);
+                failedStage = "segment";
+                failedStatus = segmentProbe.Status;
+                failedAfter = elapsed;
+                break;
+            }
+        }
+
+        if (sequence.HasValue && sequence != previousSequence)
+        {
+            previousSequence = sequence;
+            lastAdvance = now;
+        }
+        else
+        {
+            var stall = now - lastAdvance;
+            if (stall > longestStall)
+            {
+                longestStall = stall;
+            }
+        }
+
+        PrintLifetimeSample(elapsed, playlistProbe.Status, segmentStatus, sequence);
+
+        if (DateTimeOffset.UtcNow >= deadline)
+        {
+            break;
+        }
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(pollSeconds), cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            cancelled = true;
+            break;
+        }
+    }
+
+    Console.WriteLine();
+    if (longestStall > TimeSpan.FromSeconds(pollSeconds * 3))
+    {
+        Console.WriteLine(
+            $"The live window stopped advancing for up to {longestStall.TotalMinutes:F1} min while the URL still answered.");
+    }
+
+    if (failedStage == null)
+    {
+        var observed = DateTimeOffset.UtcNow - started;
+        Console.WriteLine(
+            cancelled
+                ? $"Interrupted after {observed.TotalMinutes:F1} min; the signed URL was still served."
+                : $"No expiry observed in {observed.TotalMinutes:F1} min; the signed URL was still served at the end.");
+        return 0;
+    }
+
+    Console.WriteLine(
+        $"The signed URL stopped working after {failedAfter.TotalMinutes:F1} min ({failedStage}: {failedStatus}).");
+
+    // Whether a fresh stream request recovers immediately is what decides the
+    // fix: re-acquiring a URL, or renewing the whole session.
+    var renewed = await AcquireSignedPlaylistAsync(
+        client,
+        channel,
+        preference,
+        cancellationToken);
+    var renewedPlaylist = await SignedUrlProbe.ProbeAsync(
+        renewed.PlaylistUri,
+        maximumBytes: 512 * 1024,
+        cancellationToken);
+    Console.WriteLine($"A freshly requested stream answers: media playlist {renewedPlaylist.Status}.");
+    Console.WriteLine(
+        renewedPlaylist.IsSuccess
+            ? "A new stream request recovers playback, so re-acquiring the URL is enough."
+            : "A new stream request does not recover playback, so the session itself has to be renewed.");
+    return 0;
+}
+
+static async Task<(Uri PlaylistUri, string Quality)> AcquireSignedPlaylistAsync(
+    IZattooClient client,
+    ZattooChannel channel,
+    ZattooPreferredQuality preference,
+    CancellationToken cancellationToken)
+{
+    var stream = await client.GetStreamAsync(
+        channel.Id,
+        preference,
+        ZattooStreamFormat.Hls,
+        cancellationToken);
+    if (!stream.IsSupported || string.IsNullOrWhiteSpace(stream.Url))
+    {
+        throw new ZattooStreamUnavailableException(
+            "Zattoo did not return a usable non-DRM HLS stream.");
+    }
+
+    var selection = await HlsManifestResolver.ResolveAsync(
+        stream.Url!,
+        stream.Height,
+        cancellationToken);
+    return (selection.VideoUri, stream.Quality);
+}
+
+static void PrintLifetimeSample(
+    TimeSpan elapsed,
+    string playlistStatus,
+    string segmentStatus,
+    long? mediaSequence)
+{
+    var sequence = mediaSequence.HasValue
+        ? mediaSequence.Value.ToString(CultureInfo.InvariantCulture)
+        : "---";
+    Console.WriteLine(
+        $"{elapsed.TotalMinutes,7:F1} min  playlist {playlistStatus,-14}  segment {segmentStatus,-14}  sequence {sequence}");
+}
+
 static ZattooChannel ResolveChannel(
     IReadOnlyList<ZattooChannel> channels,
     string selector)
@@ -691,4 +919,6 @@ static void PrintUsage()
     Console.WriteLine("  streams <channel-id|number|exact-name>");
     Console.WriteLine("  probe <channel-id|number|exact-name> [auto|1080p|720p|540p] [dash|hls|hls-ts]");
     Console.WriteLine("  ffmpeg-test <channel-id|number|exact-name> [seconds] [auto|1080p|720p|540p] [dash|hls|hls-ts]");
+    Console.WriteLine("  stream-lifetime <channel-id|number|exact-name> [poll-seconds] [max-minutes] [auto|1080p|720p|540p]");
+    Console.WriteLine("                       Measures how long a signed HLS URL keeps being served.");
 }

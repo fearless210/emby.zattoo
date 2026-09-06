@@ -23,6 +23,17 @@ namespace Emby.Zattoo.Plugin.LiveTv
         private static readonly TimeSpan ConsumerHandoverTimeout =
             TimeSpan.FromSeconds(5);
 
+        /// <summary>
+        /// How far back a standard error line may be read to explain an end of
+        /// stream. FFmpeg reports the cause seconds before it gives up, and it
+        /// recovers from older warnings on its own: blaming one of those would
+        /// misname the failure in the only log that explains it.
+        /// </summary>
+        private static readonly TimeSpan RecentStandardErrorWindow =
+            TimeSpan.FromSeconds(30);
+
+        private static readonly TimeSpan ProcessExitGrace = TimeSpan.FromSeconds(2);
+
         private readonly string channelId;
         private readonly string channelName;
         private readonly IZattooClient client;
@@ -34,6 +45,10 @@ namespace Emby.Zattoo.Plugin.LiveTv
         private readonly SemaphoreSlim lifecycleLock = new SemaphoreSlim(1, 1);
         private readonly ZattooStreamConsumerGate consumerGate =
             new ZattooStreamConsumerGate();
+        private readonly ZattooStandardErrorBuffer recentStandardError =
+            new ZattooStandardErrorBuffer();
+        private readonly ZattooStreamRestartBudget restartBudget =
+            new ZattooStreamRestartBudget();
         private Process? process;
         private CancellationTokenSource? streamCancellation;
         private Task? stderrMonitor;
@@ -145,30 +160,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
                             stream.Height,
                             openCancellationToken)
                         .ConfigureAwait(false);
-                    var startInfo = CreateProcessStartInfo(selection);
-                    var newProcess = new Process
-                    {
-                        StartInfo = startInfo,
-                        EnableRaisingEvents = true,
-                    };
-
-                    try
-                    {
-                        if (!newProcess.Start())
-                        {
-                            newProcess.Dispose();
-                            throw new ZattooStreamUnavailableException(
-                                "FFmpeg could not be started for the Zattoo live stream.");
-                        }
-                    }
-                    catch (Win32Exception exception)
-                    {
-                        newProcess.Dispose();
-                        throw new ZattooStreamUnavailableException(
-                            "FFmpeg could not be started. Configure its executable path in the Zattoo plugin settings.",
-                            exception);
-                    }
-
+                    var newProcess = StartFfmpeg(selection);
                     startedProcess = newProcess;
                     startedStderrMonitor = MonitorStandardErrorAsync(newProcess);
                     if (newProcess.HasExited)
@@ -336,38 +328,88 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 channelName);
             try
             {
-                var currentProcess = process
-                    ?? throw new InvalidOperationException("The Zattoo live stream is not open.");
-                var currentCancellation = streamCancellation
-                    ?? throw new InvalidOperationException("The Zattoo live stream is not open.");
-                if (closing)
+                // One consumer, several FFmpeg processes: when a stream dies under
+                // an active consumer, the pipe is refilled from a freshly signed
+                // URL instead of ending. Emby never sees the end of file, so a
+                // recording keeps growing across the incident.
+                while (true)
                 {
-                    throw new InvalidOperationException(
-                        "This Zattoo live stream is already closing.");
-                }
-                using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
-                    cancellationToken,
-                    currentCancellation.Token))
-                {
-                    try
+                    var currentProcess = process
+                        ?? throw new InvalidOperationException("The Zattoo live stream is not open.");
+                    var currentCancellation = streamCancellation
+                        ?? throw new InvalidOperationException("The Zattoo live stream is not open.");
+                    if (closing)
                     {
-                        await currentProcess.StandardOutput.BaseStream.CopyToAsync(
-                                writer,
-                                81920,
-                                linked.Token)
-                            .ConfigureAwait(false);
+                        throw new InvalidOperationException(
+                            "This Zattoo live stream is already closing.");
                     }
-                    catch (OperationCanceledException) when (
-                        currentCancellation.IsCancellationRequested
-                        && !cancellationToken.IsCancellationRequested)
+
+                    using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                        cancellationToken,
+                        currentCancellation.Token))
+                    {
+                        try
+                        {
+                            await currentProcess.StandardOutput.BaseStream.CopyToAsync(
+                                    writer,
+                                    81920,
+                                    linked.Token)
+                                .ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException) when (
+                            currentCancellation.IsCancellationRequested
+                            && !cancellationToken.IsCancellationRequested)
+                        {
+                            return;
+                        }
+                    }
+
+                    if (closing)
                     {
                         return;
                     }
-                }
 
-                if (!closing && currentProcess.HasExited && currentProcess.ExitCode != 0)
-                {
-                    throw new IOException("FFmpeg stopped unexpectedly while remuxing Zattoo Live TV.");
+                    // Reaching this point means FFmpeg closed its output while the
+                    // stream was still wanted. A clean exit code is not good news
+                    // here: live television that ends by itself is a truncated
+                    // recording, and Emby would otherwise record it as a normal end.
+                    var failure = await DescribeUnexpectedEndAsync(currentProcess)
+                        .ConfigureAwait(false);
+                    var elapsed = (DateTimeOffset.UtcNow - attachedAt).TotalSeconds;
+                    if (failure.Kind != ZattooStreamFailureKind.Recoverable)
+                    {
+                        logger.Error(
+                            "Zattoo channel {0} ended after {1:F1}s: {2} (FFmpeg exit code {3}); a new stream request cannot repair it.",
+                            channelName,
+                            elapsed,
+                            failure.Description,
+                            failure.ExitCode);
+                        throw new IOException(
+                            "The Zattoo live stream ended unexpectedly: " + failure.Description + ".");
+                    }
+
+                    if (!restartBudget.TryAcquire(DateTimeOffset.UtcNow))
+                    {
+                        logger.Error(
+                            "Zattoo channel {0} ended after {1:F1}s: {2} (FFmpeg exit code {3}); the reopen budget is spent.",
+                            channelName,
+                            elapsed,
+                            failure.Description,
+                            failure.ExitCode);
+                        throw new IOException(
+                            "The Zattoo live stream ended repeatedly: " + failure.Description + ".");
+                    }
+
+                    logger.Warn(
+                        "Zattoo channel {0} ended after {1:F1}s: {2} (FFmpeg exit code {3}); reopening with a new stream URL.",
+                        channelName,
+                        elapsed,
+                        failure.Description,
+                        failure.ExitCode);
+                    if (!await ReopenAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        return;
+                    }
                 }
             }
             catch (Exception exception) when (!(exception is OperationCanceledException))
@@ -478,9 +520,206 @@ namespace Emby.Zattoo.Plugin.LiveTv
                 var safeLine = SensitiveDataSanitizer.SanitizeText(line);
                 if (!string.IsNullOrWhiteSpace(safeLine))
                 {
+                    RememberStandardErrorLine(safeLine);
                     logger.Debug("Zattoo FFmpeg: {0}", safeLine);
                 }
             }
+        }
+
+        private Process StartFfmpeg(HlsPlaylistSelection selection)
+        {
+            var newProcess = new Process
+            {
+                StartInfo = CreateProcessStartInfo(selection),
+                EnableRaisingEvents = true,
+            };
+
+            try
+            {
+                if (!newProcess.Start())
+                {
+                    newProcess.Dispose();
+                    throw new ZattooStreamUnavailableException(
+                        "FFmpeg could not be started for the Zattoo live stream.");
+                }
+            }
+            catch (Win32Exception exception)
+            {
+                newProcess.Dispose();
+                throw new ZattooStreamUnavailableException(
+                    "FFmpeg could not be started. Configure its executable path in the Zattoo plugin settings.",
+                    exception);
+            }
+
+            return newProcess;
+        }
+
+        /// <summary>
+        /// Replaces the FFmpeg process behind an open stream with one fed by a
+        /// freshly signed URL, without touching the capacity lease already held
+        /// and without ending the pipe the consumer is reading.
+        /// </summary>
+        /// <returns>False when the stream was closed instead of reopened.</returns>
+        private async Task<bool> ReopenAsync(CancellationToken cancellationToken)
+        {
+            Process? previousProcess;
+            Task? previousMonitor;
+            CancellationTokenSource? currentCancellation;
+
+            await lifecycleLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (closing)
+                {
+                    return false;
+                }
+
+                previousProcess = process;
+                previousMonitor = stderrMonitor;
+                currentCancellation = streamCancellation;
+
+                // The stream is briefly without a process on purpose: a Close
+                // arriving now must find nothing to stop rather than a process
+                // this method is already disposing. The lock is released before
+                // the provider is called, so Close never waits on the network.
+                process = null;
+                stderrMonitor = null;
+            }
+            finally
+            {
+                lifecycleLock.Release();
+            }
+
+            if (previousProcess != null)
+            {
+                await StopProcessAsync(previousProcess).ConfigureAwait(false);
+                if (previousMonitor != null)
+                {
+                    await previousMonitor.ConfigureAwait(false);
+                }
+
+                previousProcess.Dispose();
+            }
+
+            // The next classification must not read the lines that explained this
+            // failure.
+            recentStandardError.Clear();
+
+            Process? startedProcess = null;
+            Task? startedMonitor = null;
+            try
+            {
+                using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    currentCancellation?.Token ?? CancellationToken.None))
+                {
+                    var stream = await client.GetStreamAsync(
+                            channelId,
+                            preferredQuality,
+                            ZattooStreamFormat.Hls,
+                            linked.Token)
+                        .ConfigureAwait(false);
+                    if (!stream.IsSupported || string.IsNullOrWhiteSpace(stream.Url))
+                    {
+                        throw new ZattooStreamUnavailableException(
+                            "Zattoo did not return a usable non-DRM HLS stream.");
+                    }
+
+                    var selection = await HlsManifestResolver.ResolveAsync(
+                            stream.Url!,
+                            stream.Height,
+                            linked.Token)
+                        .ConfigureAwait(false);
+                    startedProcess = StartFfmpeg(selection);
+                    startedMonitor = MonitorStandardErrorAsync(startedProcess);
+                    if (startedProcess.HasExited)
+                    {
+                        throw new ZattooStreamUnavailableException(
+                            "FFmpeg exited while reopening the Zattoo live stream.");
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (closing)
+            {
+                await DiscardAsync(startedProcess, startedMonitor).ConfigureAwait(false);
+                return false;
+            }
+            catch
+            {
+                await DiscardAsync(startedProcess, startedMonitor).ConfigureAwait(false);
+                throw;
+            }
+
+            await lifecycleLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (closing)
+                {
+                    await DiscardAsync(startedProcess, startedMonitor).ConfigureAwait(false);
+                    return false;
+                }
+
+                process = startedProcess;
+                stderrMonitor = startedMonitor;
+            }
+            finally
+            {
+                lifecycleLock.Release();
+            }
+
+            logger.Info(
+                "Zattoo channel {0} reopened with a new stream URL; the pipe was not interrupted.",
+                channelName);
+            return true;
+        }
+
+        private static async Task DiscardAsync(Process? startedProcess, Task? startedMonitor)
+        {
+            if (startedProcess == null)
+            {
+                return;
+            }
+
+            await StopProcessAsync(startedProcess).ConfigureAwait(false);
+            if (startedMonitor != null)
+            {
+                await startedMonitor.ConfigureAwait(false);
+            }
+
+            startedProcess.Dispose();
+        }
+
+        /// <summary>
+        /// Keeps the last standard error lines, already sanitized, so that an end
+        /// of stream can be explained without keeping the whole FFmpeg output.
+        /// </summary>
+        private void RememberStandardErrorLine(string line)
+        {
+            recentStandardError.Add(line, DateTimeOffset.UtcNow);
+        }
+
+        /// <summary>
+        /// Explains an FFmpeg process that ended while the stream was still
+        /// wanted. The process is given a short grace period first, because
+        /// standard output closes slightly before the exit code is available.
+        /// </summary>
+        private async Task<ZattooStreamFailure> DescribeUnexpectedEndAsync(
+            Process currentProcess)
+        {
+            var exit = WaitForExitAsync(currentProcess);
+            await Task.WhenAny(exit, Task.Delay(ProcessExitGrace)).ConfigureAwait(false);
+
+            var exitCode = 0;
+            if (currentProcess.HasExited)
+            {
+                exitCode = currentProcess.ExitCode;
+            }
+
+            return ZattooStreamFailureClassifier.Classify(
+                exitCode,
+                recentStandardError.ReadRecent(
+                    DateTimeOffset.UtcNow,
+                    RecentStandardErrorWindow));
         }
 
         private static async Task StopProcessAsync(Process currentProcess)

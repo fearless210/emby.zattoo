@@ -147,6 +147,43 @@ puis transmet uniquement ces playlists média à ffmpeg. Le master et ses URLs
 éphémères ne sont ni affichés, ni écrits sur disque. Cette étape évite que le
 démultiplexeur sonde toutes les variantes adaptatives au démarrage.
 
+## 5. Durée de vie d'une URL signée
+
+```bash
+dotnet run --project src/Zattoo.Spike -- stream-lifetime <cid>
+dotnet run --project src/Zattoo.Spike -- stream-lifetime <cid> 30 240 auto
+```
+
+Le plugin résout le manifeste **une seule fois** à l'ouverture et confie les
+playlists média à ffmpeg, qui n'a aucun moyen de renouveler leurs URLs. Toute la
+lecture dépend donc d'une durée de vie que rien ne mesure. Cette commande la
+mesure.
+
+À chaque tour, elle demande la playlist média vidéo, y lit la séquence média et
+le segment le plus récent, puis demande ce segment en n'en lisant que les
+premiers kilo-octets — de quoi prouver que l'URL est encore servie sans
+télécharger le flux. Elle affiche une ligne par tour : temps écoulé, statut de la
+playlist, statut du segment, séquence média. Aucune URL n'est imprimée et rien
+n'est écrit sur disque.
+
+Les paramètres sont l'intervalle en secondes (5 à 600, par défaut 30) et la
+durée maximale en minutes (1 à 720, par défaut 240). La commande **occupe un
+flux simultané du compte** pendant toute son exécution.
+
+Elle s'arrête au premier échec et distingue trois observations :
+
+- **expiration** : la playlist ou le segment cesse d'être servi. Le temps écoulé
+  et le statut sont affichés ;
+- **fenêtre figée** : les URLs répondent encore mais la séquence média n'avance
+  plus. Signalé séparément, car ffmpeg n'y verrait qu'un flux qui se tarit ;
+- **document invalide** : un `200` qui ne contient plus de playlist, certains
+  origines répondant par une page d'erreur plutôt que par un statut.
+
+Après un échec, la commande redemande un flux et teste la playlist obtenue. Ce
+dernier résultat est le plus important : s'il fonctionne, une simple
+ré-acquisition d'URL suffit à réparer une lecture interrompue ; sinon, c'est la
+session elle-même qu'il faut renouveler.
+
 ## Interprétation
 
 - code 0 pour les deux outils, avec un temps CPU très inférieur à la durée

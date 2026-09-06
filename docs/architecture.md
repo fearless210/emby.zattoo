@@ -110,6 +110,73 @@ Une ouverture qui échoue ne doit **rien** laisser derrière elle : Emby n'appel
 pas `Close` sur un flux qui n'a pas ouvert, donc un FFmpeg déjà démarré
 continuerait indéfiniment à tirer le flux du fournisseur.
 
+### Une fin de flux non demandée est une panne
+
+Si FFmpeg ferme sa sortie alors que `Close` n'a pas été appelé, le flux est
+terminé sans que personne ne l'ait voulu. **Un code de sortie nul n'est pas une
+bonne nouvelle** dans ce cas : de la télévision en direct qui se termine seule,
+c'est un enregistrement tronqué, et Emby l'enregistrerait comme une fin normale.
+
+`ZattooStreamFailureClassifier` qualifie cette fin à partir du code de sortie et
+des dernières lignes de `stderr`. Il répond à une seule question : une nouvelle
+URL a-t-elle une chance ? Une commande FFmpeg que le système ne peut pas
+exécuter est déclarée définitive — la rouvrir ne ferait que consommer les flux
+simultanés du compte en masquant la cause. Tout le reste est déclaré
+récupérable.
+
+Le motif retourné vient d'un vocabulaire interne et jamais du texte du
+fournisseur, afin qu'une URL signée imprimée par FFmpeg ne puisse pas voyager
+avec lui.
+
+`ZattooStandardErrorBuffer` conserve ces lignes, déjà assainies, bornées **en
+nombre et en âge** : douze au plus, et seules celles des trente dernières
+secondes sont lues. FFmpeg se remet seul de ses avertissements transitoires, et
+un avertissement déjà surmonté, présenté plus tard comme la cause d'une panne
+sans rapport, ferait mentir le seul journal qui l'explique. Un tampon vide est
+une réponse valable : rien de récent n'a été dit, donc rien n'est accusé.
+
+Une durée de vie d'URL signée a été mesurée à plus de trois heures de lecture
+continue (voir [zattoo-api.md](zattoo-api.md)). Le plugin ne renouvelle donc
+rien par anticipation : ces fins de flux sont traitées comme des évènements
+imprévisibles, pas comme une échéance.
+
+### Réouverture sans interrompre le tube
+
+Sur un verdict récupérable, le flux est **rouvert** au lieu de s'arrêter : une
+nouvelle URL est demandée, un nouveau FFmpeg démarre, et la copie reprend vers
+le **même** consommateur. Emby ne voit jamais de fin de fichier, donc un
+enregistrement continue de grossir à travers l'incident.
+
+Trois précautions encadrent la manœuvre :
+
+- le **jeton de capacité n'est ni rendu ni repris**. Le flux occupe déjà sa
+  place, et la rendre le temps d'une réouverture exposerait à se la faire
+  prendre ;
+- la réouverture ne tient pas le verrou de cycle de vie pendant l'appel au
+  fournisseur. Le processus est mis à `null` sous verrou, puis le verrou est
+  rendu : un `Close` qui arrive pendant la réouverture ne trouve rien à arrêter
+  et n'attend jamais le réseau. Si la fermeture gagne la course, le processus
+  fraîchement démarré est jeté ;
+- `ZattooStreamRestartBudget` plafonne les réouvertures à trois par fenêtre
+  glissante de cinq minutes. Un enregistrement long survit ainsi à plusieurs
+  incidents sans rapport, tandis qu'un flux qui échoue immédiatement à chaque
+  fois s'arrête au lieu de marteler le compte.
+
+Le raccord produit une **discontinuité d'horodatage** : le nouveau FFmpeg
+repart de zéro. C'est le prix assumé de la continuité, et `+resend_headers`
+était déjà là. `-copyts` préserverait la ligne de temps mais devrait être actif
+dès le premier processus, donc sur toutes les lectures — modifier le chemin
+normal pour un évènement rare attendra d'avoir mesuré le fichier obtenu après
+une vraie réouverture.
+
+La `MediaSourceInfo` n'est pas réécrite : Emby la détient déjà et une lecture en
+cours ne se redécrit pas. Une réouverture qui retomberait sur une variante de
+hauteur différente laisserait donc une description légèrement optimiste.
+
+Ni la réouverture ni la classification en situation ne sont couvertes par les
+tests : elles exigent un vrai FFmpeg et un vrai flux. Seuls le classificateur et
+le plafond le sont.
+
 ### Déclarer ce que contient le flux
 
 Le plugin publie le débit, la résolution et les codecs de la variante retenue
