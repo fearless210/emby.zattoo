@@ -78,6 +78,41 @@ public sealed class ZattooRuntimeSettingsTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FromConfiguration_CarriesTheFavoritesOnlyImport(bool favoritesOnly)
+    {
+        var options = new ZattooPluginOptions
+        {
+            Username = "user@example.invalid",
+            Password = "encrypted-value-not-used-here",
+            ImportFavoritesOnly = favoritesOnly,
+        };
+
+        var settings = ZattooRuntimeSettings.FromConfiguration(
+            options,
+            "decrypted-test-password");
+
+        Assert.Equal(favoritesOnly, settings.ImportFavoritesOnly);
+    }
+
+    [Fact]
+    public void FromConfiguration_ImportsEveryChannelByDefault()
+    {
+        var options = new ZattooPluginOptions
+        {
+            Username = "user@example.invalid",
+            Password = "encrypted-value-not-used-here",
+        };
+
+        var settings = ZattooRuntimeSettings.FromConfiguration(
+            options,
+            "decrypted-test-password");
+
+        Assert.False(settings.ImportFavoritesOnly);
+    }
+
+    [Theory]
     [InlineData(-1)]
     [InlineData(15)]
     public void Validate_RejectsAGuideDepthEmbyWouldNotAccept(int guideDays)

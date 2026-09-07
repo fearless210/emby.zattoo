@@ -27,7 +27,7 @@ Les identifiants, les cookies et les URL signées ne quittent jamais le serveur.
 
 | | |
 | --- | --- |
-| **Chaînes** | Import des noms, numéros officiels, favoris, logos et bouquets, en ne retenant par défaut que les chaînes réellement lisibles sans DRM |
+| **Chaînes** | Import des noms, numéros officiels, favoris, logos et bouquets, en ne retenant par défaut que les chaînes réellement lisibles sans DRM. Import limité aux favoris du compte au besoin |
 | **Lecture** | Flux HLS obtenu à la demande et remuxé en MPEG-TS, sans réencodage, avec reconnexion automatique en cas d'incident réseau et réouverture du flux si le fournisseur l'interrompt, sans couper un enregistrement en cours |
 | **Qualité** | Meilleure qualité non-DRM disponible, ou plafond manuel `1080p`, `720p`, `540p` |
 | **Guide TV** | EPG jusqu'à 14 jours, limité aux chaînes importées, avec descriptions et genres chargés progressivement en arrière-plan |
@@ -89,6 +89,7 @@ installation normale.
 | Preferred quality | `Auto` | Non. `Auto` prend la meilleure qualité non-DRM du compte. Un plafond sert à limiter la bande passante |
 | Channel import mode | `Playable channels only` | Non. Les autres modes servent au diagnostic, ou conservent les chaînes temporairement indisponibles |
 | Channel groups | vide | Seulement pour n'importer que certains bouquets. Vide importe tout. Les noms disponibles sont écrits dans le journal après chaque actualisation des chaînes |
+| Import favorites only | désactivé | Cochez pour n'importer que les chaînes marquées comme favorites dans Zattoo |
 | Guide days | `0` | Seulement pour imposer la profondeur du guide, de 1 à 14 jours. `0` laisse le réglage Live TV d'Emby décider, ce qui donne sept jours sur `Auto` |
 | Enrich guide descriptions | activé | Non. Charge en arrière-plan les descriptions et genres manquants, sans retarder l'actualisation du guide |
 | FFmpeg executable | vide | Non. Vide signifie « utiliser le FFmpeg d'Emby », ce qui fonctionne y compris en conteneur |
@@ -98,16 +99,26 @@ installation normale.
 Enregistrer. Le mot de passe s'affiche ensuite masqué : c'est normal, il n'est
 jamais renvoyé au navigateur.
 
+Si `Channel groups` est renseigné, les deux filtres se cumulent : seules les
+chaînes à la fois favorites et dans un bouquet retenu sont importées. Pour
+importer **tous** vos favoris, laissez `Channel groups` vide.
+
+Un réglage modifié ne s'applique qu'à la prochaine **actualisation des
+chaînes**, lancée depuis **Live TV → Tuner Devices** : entre-temps, Emby sert la
+liste qu'il a en cache.
+
 ### 3. Ajouter la source TV
 
 Ouvrir **Live TV → Tuner Devices → Add**, choisir **Zattoo**, valider, puis
 lancer une actualisation des chaînes.
 
-Deux options d'Emby, et non du plugin, méritent l'attention :
+Une option d'Emby, et non du plugin, mérite l'attention : le nombre de jours de
+guide se règle dans les paramètres Live TV d'Emby, entre 1 et 14. Sur `Auto`,
+Emby retient sept jours.
 
-- **Import favorites only** limite l'import aux favoris définis dans Zattoo ;
-- le nombre de jours de guide se règle dans les paramètres Live TV d'Emby, entre
-  1 et 14. Sur `Auto`, Emby retient sept jours.
+Emby n'affiche pas de case « Import favorites only » pour un tuner de plugin.
+L'import des seuls favoris se règle donc sur la page du plugin, décrite
+ci-dessus.
 
 Lancer enfin la tâche **Actualiser le guide**. Le premier passage importe le
 guide de base ; les descriptions détaillées se complètent progressivement en
@@ -123,7 +134,9 @@ source TV et le cache du guide sont conservés.
 Après une actualisation des chaînes, le journal du serveur doit contenir :
 
 ```text
-Loaded 264 of 493 Zattoo channels using PlayableOnly import mode.
+Loaded 264 of 493 Zattoo channels using PlayableOnly import mode; the account
+reports 18 favorite channel(s) and favorites-only import is off.
+Zattoo channel selection: 493 in the catalogue, 264 after the import mode, ...
 Zattoo account capabilities: 264 playable channel(s), ...
 Zattoo channel groups available: ...
 ```
@@ -137,7 +150,10 @@ Zattoo live stream consumer 1 attached for channel RTS 1 HD.
 
 | Symptôme | Piste |
 | --- | --- |
-| Aucune chaîne après l'import | Vérifier le mode d'import et, s'il est renseigné, le champ **Channel groups** : un nom de bouquet inexact ne ramène rien |
+| Aucune chaîne après l'import | Vérifier le mode d'import et, s'il est renseigné, le champ **Channel groups** : un nom de bouquet inexact ne ramène rien. La ligne `Zattoo channel selection` du journal indique quel filtre a vidé la sélection |
+| **Import favorites only** coché et l'actualisation échoue | Le compte n'a aucun favori parmi les chaînes importables. La grille précédente est conservée volontairement plutôt qu'effacée ; marquer des favoris dans Zattoo, ou décocher l'option |
+| Un réglage modifié ne change rien | Emby sert sa liste en cache tant qu'aucune actualisation des chaînes n'a été lancée |
+| Moins de chaînes que de favoris Zattoo | `Channel groups` est renseigné et se cumule avec les favoris. Le vider pour importer tous les favoris |
 | Une chaîne refuse de s'ouvrir | Le journal nomme la cause. Une chaîne disponible uniquement en DRM ne sera jamais lisible |
 | Erreur de lecture côté client | Emby ne renvoie au client qu'une erreur générique ; la cause réelle n'apparaît que dans le journal du serveur, préfixée `Zattoo` |
 | Guide vide ou trop court | La profondeur vient d'Emby, pas du plugin. Voir le réglage **Guide days** |

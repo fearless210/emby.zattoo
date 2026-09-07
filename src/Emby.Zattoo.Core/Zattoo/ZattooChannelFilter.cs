@@ -80,6 +80,18 @@ namespace Emby.Zattoo.Zattoo
             return names;
         }
 
+        /// <summary>Keeps only the channels the account marked as favorite.</summary>
+        public static IReadOnlyList<ZattooChannel> ApplyFavorites(
+            IEnumerable<ZattooChannel> channels)
+        {
+            if (channels == null)
+            {
+                throw new ArgumentNullException(nameof(channels));
+            }
+
+            return channels.Where(channel => channel.IsFavorite).ToArray();
+        }
+
         public static bool IsPlayable(ZattooChannel channel)
         {
             if (channel == null)

@@ -115,13 +115,19 @@ namespace Emby.Zattoo.Plugin.LiveTv
             var channels = await context.Client.GetChannelsAsync(cancellationToken)
                 .ConfigureAwait(false);
             var session = context.Client.SessionInfo;
-            if (tuner.ImportFavoritesOnly && session?.FavoritesAvailable == false)
+
+            // Emby does not offer its own favorites checkbox for a plugin tuner,
+            // so the plugin page carries the setting. The tuner flag is still
+            // honoured in case a future Emby exposes it again.
+            var favoritesOnly = context.Settings.ImportFavoritesOnly
+                || tuner.ImportFavoritesOnly;
+            if (favoritesOnly && session?.FavoritesAvailable == false)
             {
                 // Importing an empty list would drop every channel Emby already
                 // knows. Fail the refresh instead and keep the existing lineup.
                 throw new ZattooApiException(
                     "Zattoo did not return the channel favorites. The channel list "
-                    + "was kept unchanged because this tuner imports favorites only.");
+                    + "was kept unchanged because only favorites are imported.");
             }
 
             if (session?.FavoritesAvailable == false)
@@ -138,15 +144,27 @@ namespace Emby.Zattoo.Plugin.LiveTv
                     string.Join(", ", groups));
             }
 
+            var afterImportMode = ZattooChannelFilter.Apply(
+                channels,
+                context.Settings.ChannelImportMode);
             var importable = ZattooChannelFilter.ApplyGroups(
-                ZattooChannelFilter.Apply(
-                    channels,
-                    context.Settings.ChannelImportMode),
+                afterImportMode,
                 context.Settings.ChannelGroups);
-            var selected = (tuner.ImportFavoritesOnly
-                    ? importable.Where(channel => channel.IsFavorite)
-                    : importable)
-                .ToArray();
+            var selected = importable;
+            if (favoritesOnly)
+            {
+                selected = ZattooChannelFilter.ApplyFavorites(importable);
+                if (selected.Count == 0 && importable.Count > 0)
+                {
+                    // Only the favorites step is guarded here. An empty selection
+                    // caused by the group or import mode filters keeps its existing
+                    // behaviour, which is a separate concern.
+                    throw new ZattooApiException(
+                        "None of the importable Zattoo channels is a favorite of the "
+                        + "account. The channel list was kept unchanged because only "
+                        + "favorites are imported.");
+                }
+            }
             context.Client.SetImportedGuideChannels(
                 selected.Select(channel => channel.Id).ToArray());
             var concurrentStreams = Math.Max(
@@ -164,10 +182,20 @@ namespace Emby.Zattoo.Plugin.LiveTv
             }
 
             Logger.Info(
-                "Loaded {0} of {1} Zattoo channels using {2} import mode.",
-                selected.Length,
+                "Loaded {0} of {1} Zattoo channels using {2} import mode; the account "
+                + "reports {3} favorite channel(s) and favorites-only import is {4}.",
+                selected.Count,
                 channels.Count,
-                context.Settings.ChannelImportMode);
+                context.Settings.ChannelImportMode,
+                channels.Count(channel => channel.IsFavorite),
+                favoritesOnly ? "on" : "off");
+            Logger.Info(
+                "Zattoo channel selection: {0} in the catalogue, {1} after the import "
+                + "mode, {2} after the groups, {3} after the favorites.",
+                channels.Count,
+                afterImportMode.Count,
+                importable.Count,
+                selected.Count);
             if (session != null)
             {
                 Logger.Info(

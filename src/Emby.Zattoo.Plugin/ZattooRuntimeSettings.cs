@@ -21,9 +21,11 @@ namespace Emby.Zattoo.Plugin
             ZattooChannelImportMode channelImportMode,
             string ffmpegPath,
             int guideDays,
-            IReadOnlyList<string> channelGroups)
+            IReadOnlyList<string> channelGroups,
+            bool importFavoritesOnly)
         {
             ChannelGroups = channelGroups;
+            ImportFavoritesOnly = importFavoritesOnly;
             ClientOptions = clientOptions;
             PreferredQuality = preferredQuality;
             ChannelImportMode = channelImportMode;
@@ -44,6 +46,9 @@ namespace Emby.Zattoo.Plugin
 
         /// <summary>Gets the provider groups to import, empty for all of them.</summary>
         public IReadOnlyList<string> ChannelGroups { get; }
+
+        /// <summary>Gets a value indicating whether only account favorites are imported.</summary>
+        public bool ImportFavoritesOnly { get; }
 
         public static ZattooRuntimeSettings FromConfiguration(
             ZattooPluginOptions configuration,
@@ -107,7 +112,8 @@ namespace Emby.Zattoo.Plugin
                 // FFmpeg Emby runs. Resolving it here would hide that intent.
                 configuration.FfmpegPath?.Trim() ?? string.Empty,
                 configuration.GuideDays,
-                SplitChannelGroups(configuration.ChannelGroups));
+                SplitChannelGroups(configuration.ChannelGroups),
+                configuration.ImportFavoritesOnly);
         }
 
         private static IReadOnlyList<string> SplitChannelGroups(string value)

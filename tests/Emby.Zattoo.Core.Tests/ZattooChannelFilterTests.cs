@@ -119,6 +119,54 @@ public sealed class ZattooChannelFilterTests
         Assert.Equal(new[] { "Suisse", "France" }, groups);
     }
 
+    [Fact]
+    public void ApplyFavorites_KeepsOnlyTheAccountFavorites()
+    {
+        var result = ZattooChannelFilter.ApplyFavorites(CreateMixedFavorites());
+
+        Assert.Equal(new[] { "ch-a", "ch-c" }, result.Select(item => item.Id));
+    }
+
+    [Fact]
+    public void ApplyFavorites_ReturnsNothingWhenTheAccountHasNoFavorite()
+    {
+        var channels = new[]
+        {
+            new ZattooChannel { Id = "ch-a" },
+            new ZattooChannel { Id = "ch-b" },
+        };
+
+        // The caller decides what an empty selection means; the filter only
+        // reports it.
+        Assert.Empty(ZattooChannelFilter.ApplyFavorites(channels));
+    }
+
+    [Fact]
+    public void ApplyFavorites_PreservesTheCatalogueOrder()
+    {
+        var result = ZattooChannelFilter.ApplyFavorites(CreateMixedFavorites());
+
+        Assert.Equal("ch-a", result[0].Id);
+        Assert.Equal("ch-c", result[1].Id);
+    }
+
+    [Fact]
+    public void ApplyFavorites_RejectsAMissingCatalogue()
+    {
+        Assert.Throws<ArgumentNullException>(
+            () => ZattooChannelFilter.ApplyFavorites(null!));
+    }
+
+    private static IReadOnlyList<ZattooChannel> CreateMixedFavorites()
+    {
+        return new[]
+        {
+            new ZattooChannel { Id = "ch-a", IsFavorite = true },
+            new ZattooChannel { Id = "ch-b", IsFavorite = false },
+            new ZattooChannel { Id = "ch-c", IsFavorite = true },
+        };
+    }
+
     private static IReadOnlyList<ZattooChannel> CreateGroupedChannels()
     {
         return new[]

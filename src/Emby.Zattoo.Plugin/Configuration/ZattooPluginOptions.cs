@@ -50,6 +50,12 @@ namespace Emby.Zattoo.Plugin.Configuration
             + "listed in the server log after each channel refresh.")]
         public string ChannelGroups { get; set; } = string.Empty;
 
+        [DisplayName("Import favorites only")]
+        [Description(
+            "Imports only the channels marked as favorite in the Zattoo account. "
+            + "Combine it with Channel groups to narrow the selection further.")]
+        public bool ImportFavoritesOnly { get; set; }
+
         [DisplayName("Guide days")]
         [Description(
             "Number of days of guide data Emby downloads, from 1 to 14. Leave 0 "
