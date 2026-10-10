@@ -78,6 +78,21 @@ les lignes du guide une fois.
 Emby appelle `Open` puis `Close`, jamais `Dispose`. Tout ce qui doit être
 libéré l'est dans `Close`.
 
+### `ILiveStream` diffère entre Emby 4.9 et 4.10
+
+Emby 4.9 compte lui-même les consommateurs d'un flux à travers le setter de
+`ConsumerCount`. Emby 4.10 a retiré ce setter et ajouté `AddConsumer(string)`
+et `RemoveConsumer(string)` : c'est au flux de tenir le compte. Un membre
+d'interface absent de la classe empêche le runtime de la charger, et Emby
+répond alors « aucun flux compatible » sur toutes les chaînes.
+
+Le plugin reste compilé contre le SDK 4.9 et déclare les trois membres
+`public virtual`, dans une classe non scellée. Le runtime relie un membre
+d'interface à une méthode publique virtuelle de même nom et de même
+signature, même si le SDK de compilation ne le déclarait pas : un seul DLL se
+charge ainsi sur les deux versions. Compiler contre le SDK 4.10 casserait au
+contraire Emby 4.9, faute de setter virtuel.
+
 ### Emby se rattache plusieurs fois au même flux
 
 La détection des pistes lit le flux avant que le transcodage ne le lise à son

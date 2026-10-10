@@ -18,7 +18,7 @@ using MediaBrowser.Model.Logging;
 namespace Emby.Zattoo.Plugin.LiveTv
 {
     /// <summary>Owns one server-side FFmpeg remux from Zattoo HLS7 to MPEG-TS.</summary>
-    internal sealed class ZattooLiveStream : ILiveStream
+    internal class ZattooLiveStream : ILiveStream
     {
         private static readonly TimeSpan ConsumerHandoverTimeout =
             TimeSpan.FromSeconds(5);
@@ -53,6 +53,7 @@ namespace Emby.Zattoo.Plugin.LiveTv
         private CancellationTokenSource? streamCancellation;
         private Task? stderrMonitor;
         private IDisposable? capacityLease;
+        private int consumerCount;
         private int consumerNumber;
         private int duplicateMoovWarnings;
         private bool closing;
@@ -98,7 +99,20 @@ namespace Emby.Zattoo.Plugin.LiveTv
             OriginalStreamId = MediaSource.Id;
         }
 
-        public int ConsumerCount { get; set; }
+        /// <summary>Gets or sets how many Emby consumers hold this stream.</summary>
+        /// <remarks>
+        /// Emby 4.9 counts its consumers itself through this setter; Emby 4.10
+        /// removed the setter and calls <see cref="AddConsumer"/> and
+        /// <see cref="RemoveConsumer"/> instead. These three members are virtual,
+        /// and the class is therefore not sealed, so that the runtime binds them
+        /// to whichever interface the hosting server declares: one DLL built
+        /// against the 4.9 SDK then loads on both versions.
+        /// </remarks>
+        public virtual int ConsumerCount
+        {
+            get => Volatile.Read(ref consumerCount);
+            set => Volatile.Write(ref consumerCount, Math.Max(0, value));
+        }
 
         public string OriginalStreamId { get; set; }
 
@@ -113,6 +127,31 @@ namespace Emby.Zattoo.Plugin.LiveTv
         public DateTimeOffset DateOpened { get; private set; }
 
         public bool SupportsCopyTo => true;
+
+        /// <summary>Counts one more Emby consumer (Emby 4.10 and later).</summary>
+        public virtual void AddConsumer(string consumerId)
+        {
+            Interlocked.Increment(ref consumerCount);
+        }
+
+        /// <summary>Counts one Emby consumer less (Emby 4.10 and later).</summary>
+        /// <remarks>
+        /// An unmatched call must not leave the count negative: it would then
+        /// never read as zero again once the real consumers are gone.
+        /// </remarks>
+        public virtual void RemoveConsumer(string consumerId)
+        {
+            int current;
+            do
+            {
+                current = Volatile.Read(ref consumerCount);
+                if (current == 0)
+                {
+                    return;
+                }
+            }
+            while (Interlocked.CompareExchange(ref consumerCount, current - 1, current) != current);
+        }
 
         public async Task Open(CancellationToken openCancellationToken)
         {
