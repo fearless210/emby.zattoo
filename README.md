@@ -43,7 +43,8 @@ toute chaîne nécessitant un DRM.
 Validé sur Emby 4.9.5.0 sous Linux avec un compte réel : lecture sur Emby Web,
 iOS et Samsung Tizen, transcodage matériel compris ; enregistrement de 2 h 10
 mené à terme et décodé sans une seule erreur ; actualisation du guide en une
-minute environ après le premier import.
+minute environ après le premier import. Depuis la v1.2.1, le plugin fonctionne
+aussi sur Emby 4.10.1.0.
 
 Les chiffres du catalogue dépendent de l'abonnement et de la région. Sur le
 compte de validation : 493 chaînes publiées, dont 264 lisibles sans DRM.
@@ -52,7 +53,7 @@ compte de validation : 493 chaînes publiées, dont 264 lisibles sans DRM.
 
 ### Prérequis
 
-- un serveur Emby 4.9.x sous Linux, avec un abonnement Emby Premiere actif —
+- un serveur Emby 4.9.x ou 4.10.x sous Linux, avec un abonnement Emby Premiere actif —
   les fonctions Live TV et DVR d'Emby en dépendent ;
 - un compte Zattoo valide ;
 - un accès HTTPS sortant vers Zattoo.
@@ -172,7 +173,7 @@ jetons d'appareil.
   dans la ligne de commande du processus FFmpeg au niveau du système ;
 - les endpoints Zattoo utilisés sont observés, non documentés publiquement, et
   peuvent changer sans préavis ;
-- compatibilité prévue pour Emby 4.9 uniquement à ce stade.
+- compatibilité prévue pour Emby 4.9 et 4.10 uniquement à ce stade.
 
 Avant toute utilisation ou redistribution, consultez les
 [conditions Zattoo](https://zattoo.com/ch/fr/company/terms) applicables à votre
